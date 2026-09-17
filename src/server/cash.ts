@@ -123,8 +123,9 @@ export async function declareDeposit(courierId: string, input: { amount: number;
     },
   });
 
-  // When courier confirms in LA CAISSE, release pending COD to merchants
-  await releaseCourierPendingCod(courierId);
+  // Note: Courier declared the deposit in LA CAISSE (status: DECLARED).
+  // COD is held in PENDING state until the Admin verifies the deposit (setDepositStatus -> VERIFIED or bulkApproveDepositsAction).
+  // Only upon Admin approval is releaseCourierPendingCod executed and added to merchant available wallet balance.
 
   return deposit;
 }

@@ -286,6 +286,8 @@ export async function setDepositStatusAction(depositId: string, status: "VERIFIE
     await setDepositStatus(depositId, status, admin.name);
     await audit({ actorId: admin.id, actorName: admin.name, actorType: "ADMIN", action: status === "VERIFIED" ? "DEPOSIT_VERIFIED" : "DEPOSIT_MISMATCH", entity: "CourierDeposit", entityId: depositId });
     revalidatePath("/admin/couriers");
+    revalidatePath("/admin");
+    revalidatePath("/app/wallet");
     return { ok: true };
   } catch (e) { return fail(e); }
 }
@@ -502,6 +504,7 @@ export async function bulkApproveDepositsAction(): Promise<AdminResult> {
 
     revalidatePath("/admin");
     revalidatePath("/admin/couriers");
+    revalidatePath("/app/wallet");
     return { ok: true, data: { count: declaredDeposits.length } };
   } catch (e) { return fail(e); }
 }

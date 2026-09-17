@@ -78,7 +78,7 @@ export default async function AdminDashboard() {
   // 1. Central Caisse Radar Data
   let caisseRadarData: CaisseRadarData | null = null;
   if (features.admin_central_caisse) {
-    const [streetAgg, declaredAgg, declCount, vaultTodayAgg, merchantsPayAgg] = await Promise.all([
+    const [streetAgg, declaredAgg, declCount, vaultTodayAgg, merchantsPayAgg, pendingListRows] = await Promise.all([
       db.delivery.aggregate({
         where: { status: { in: ["IN_TRANSIT", "OUT_FOR_DELIVERY"] }, codCollected: { gt: 0 } },
         _sum: { codCollected: true },
@@ -98,6 +98,14 @@ export default async function AdminDashboard() {
         where: { walletBalance: { gt: 0 } },
         _sum: { walletBalance: true },
       }),
+      db.courierDeposit.findMany({
+        where: { status: "DECLARED" },
+        include: {
+          courier: { include: { user: { select: { name: true, phone: true } } } },
+        },
+        orderBy: { declaredAt: "desc" },
+        take: 8,
+      }),
     ]);
     caisseRadarData = {
       cashInStreet: streetAgg._sum.codCollected ?? 0,
@@ -105,6 +113,18 @@ export default async function AdminDashboard() {
       pendingDepositsCount: declCount,
       vaultCashToday: vaultTodayAgg._sum.amount ?? 0,
       merchantsPayable: merchantsPayAgg._sum.walletBalance ?? 0,
+      pendingList: pendingListRows.map((d) => ({
+        id: d.id,
+        courierId: d.courierId,
+        courierName: d.courier.user.name,
+        courierPhone: d.courier.user.phone ?? "",
+        amount: d.amount,
+        expectedAmount: d.expectedAmount,
+        difference: d.difference,
+        declaredAt: d.declaredAt.toISOString(),
+        note: d.note,
+        proofPhoto: d.proofPhoto,
+      })),
     };
   }
 
