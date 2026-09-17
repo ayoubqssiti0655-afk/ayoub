@@ -10,11 +10,13 @@ const ICON_REGISTRY: Record<string, React.ElementType> = {
   ShoppingCart: Icons.ShoppingCart, Package: Icons.Package, Users: Icons.Users, RotateCcw: Icons.RotateCcw,
   Percent: Icons.Percent, ScrollText: Icons.ScrollText, CheckCircle2: Icons.CheckCircle2, Bike: Icons.Bike,
   Building2: Icons.Building2, MapPinned: Icons.MapPinned, ChartLine: Icons.ChartLine, Tag: Icons.Tag,
-  Bell: Icons.Bell,
+  Bell: Icons.Bell, PhoneCall: Icons.PhoneCall, ShieldAlert: Icons.ShieldAlert,
 };
 function resolveIcon(icon?: string | React.ElementType): React.ElementType | undefined {
   if (!icon) return undefined;
-  return typeof icon === "string" ? (ICON_REGISTRY[icon] ?? Icons.Circle) : icon;
+  if (typeof icon === "string") return ICON_REGISTRY[icon] ?? Icons.Circle;
+  if (typeof icon === "function" || (typeof icon === "object" && icon !== null)) return icon;
+  return Icons.Circle;
 }
 import { useI18n } from "@/i18n/provider";
 import { Button } from "@/components/ui/button";

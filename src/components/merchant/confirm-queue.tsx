@@ -4,7 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import {
   Check, MessageCircle, Phone, ShieldAlert, ShieldCheck, ShieldQuestion,
-  Ban, Volume2, VolumeX, Radio, Search, CheckCircle2, RefreshCw,
+  Ban, Volume2, VolumeX, Search, CheckCircle2, Play,
 } from "lucide-react";
 import { useI18n } from "@/i18n/provider";
 import { Button } from "@/components/ui/button";
@@ -32,9 +32,13 @@ const WA_CONFIRM = (ref: string, name: string, amount: string) =>
 
 function playNotificationChime() {
   try {
+    if (typeof window === "undefined") return;
     const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
     if (!AudioCtx) return;
     const ctx = new AudioCtx();
+    if (ctx.state === "suspended") {
+      ctx.resume().catch(() => {});
+    }
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
 
@@ -52,17 +56,21 @@ function playNotificationChime() {
   } catch {}
 }
 
-export function ConfirmQueue({ rows, enabled }: { rows: ConfirmRow[]; enabled: boolean }) {
+export function ConfirmQueue({ rows = [], enabled = true }: { rows?: ConfirmRow[]; enabled?: boolean }) {
   const { t, money, rel, phone: fmtPhone } = useI18n();
   const router = useRouter();
   const toast = useToast();
 
-  const [list, setList] = React.useState<ConfirmRow[]>(rows);
+  const [list, setList] = React.useState<ConfirmRow[]>(rows || []);
   const [busy, setBusy] = React.useState<string | null>(null);
   const [soundEnabled, setSoundEnabled] = React.useState(true);
   const [search, setSearch] = React.useState("");
-  const [lastSync, setLastSync] = React.useState<Date>(new Date());
   const [isLiveActive, setIsLiveActive] = React.useState(true);
+
+  // Sync with server props on refresh
+  React.useEffect(() => {
+    if (rows) setList(rows);
+  }, [rows]);
 
   // Initialize sound preference
   React.useEffect(() => {
@@ -78,8 +86,16 @@ export function ConfirmQueue({ rows, enabled }: { rows: ConfirmRow[]; enabled: b
       try {
         localStorage.setItem("masar_confirm_sound", String(next));
       } catch {}
+      if (next) {
+        playNotificationChime();
+      }
       return next;
     });
+  }
+
+  function testSound() {
+    playNotificationChime();
+    toast.push({ title: "🔔 تم تشغيل نغمة الإشعار التجريبية", variant: "default" });
   }
 
   // Real-time Live Polling (every 3.5 seconds)
@@ -91,20 +107,18 @@ export function ConfirmQueue({ rows, enabled }: { rows: ConfirmRow[]; enabled: b
         const res = await fetch("/api/v1/confirmations");
         if (!res.ok) return;
         const data = await res.json();
-        if (!data.orders) return;
-
-        setLastSync(new Date());
+        if (!Array.isArray(data.orders)) return;
 
         setList((prev) => {
           const prevIds = new Set(prev.map((x) => x.id));
-          const newOrders = (data.orders as ConfirmRow[]).filter((x) => !prevIds.has(x.id));
+          const incomingOrders = (data.orders as ConfirmRow[]).filter((x) => !prevIds.has(x.id));
 
-          if (newOrders.length > 0) {
+          if (incomingOrders.length > 0 && prev.length > 0) {
             if (soundEnabled) {
               playNotificationChime();
             }
             toast.push({
-              title: `🔔 وصل طلب جديد بانتظار التأكيد: ${newOrders[0].reference}`,
+              title: `🔔 وصل طلب جديد بانتظار التأكيد: ${incomingOrders[0].reference}`,
               variant: "default",
             });
           }
@@ -112,7 +126,7 @@ export function ConfirmQueue({ rows, enabled }: { rows: ConfirmRow[]; enabled: b
           return data.orders;
         });
       } catch (err) {
-        console.error("Live sync failed", err);
+        // Silent poll error
       }
     }, 3500);
 
@@ -135,7 +149,7 @@ export function ConfirmQueue({ rows, enabled }: { rows: ConfirmRow[]; enabled: b
       const refetch = await fetch("/api/v1/confirmations");
       if (refetch.ok) {
         const d = await refetch.json();
-        setList(d.orders);
+        if (Array.isArray(d.orders)) setList(d.orders);
       }
     }
   }
@@ -155,20 +169,20 @@ export function ConfirmQueue({ rows, enabled }: { rows: ConfirmRow[]; enabled: b
     }
   }
 
-  const filtered = list.filter((r) => {
+  const safeList = Array.isArray(list) ? list : [];
+  const filtered = safeList.filter((r) => {
     if (!search) return true;
     const q = search.toLowerCase();
-    return (
-      r.fullName.toLowerCase().includes(q) ||
-      r.phone.includes(q) ||
-      r.reference.toLowerCase().includes(q) ||
-      r.city.toLowerCase().includes(q)
-    );
+    const name = (r.fullName || "").toLowerCase();
+    const phone = r.phone || "";
+    const ref = (r.reference || "").toLowerCase();
+    const city = (r.city || "").toLowerCase();
+    return name.includes(q) || phone.includes(q) || ref.includes(q) || city.includes(q);
   });
 
   return (
     <div className="space-y-4">
-      {/* Live Stream Bar */}
+      {/* Live Stream Control Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface p-3.5 shadow-xs">
         <div className="flex items-center gap-3">
           {/* Glowing live indicator */}
@@ -183,7 +197,7 @@ export function ConfirmQueue({ rows, enabled }: { rows: ConfirmRow[]; enabled: b
           </div>
 
           <p className="text-[12.5px] font-semibold">
-            {list.length} {list.length === 1 ? "طلب بانتظار التأكيد" : "طلبات بانتظار التأكيد"}
+            {safeList.length} {safeList.length === 1 ? "طلب بانتظار التأكيد" : "طلبات بانتظار التأكيد"}
           </p>
         </div>
 
@@ -206,6 +220,18 @@ export function ConfirmQueue({ rows, enabled }: { rows: ConfirmRow[]; enabled: b
             </span>
           </button>
 
+          {soundEnabled && (
+            <button
+              type="button"
+              onClick={testSound}
+              className="inline-flex h-8 items-center gap-1 rounded-lg border border-border bg-surface px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              title="تجربة صوت الرنين"
+            >
+              <Play className="size-3" />
+              <span className="hidden md:inline">تجربة الصوت</span>
+            </button>
+          )}
+
           {/* Search */}
           <div className="relative w-44 sm:w-56">
             <Search className="pointer-events-none absolute start-2.5 top-1/2 size-3.5 -translate-y-1/2 text-faint" />
@@ -219,22 +245,30 @@ export function ConfirmQueue({ rows, enabled }: { rows: ConfirmRow[]; enabled: b
         </div>
       </div>
 
-      {/* Orders List */}
+      {/* Orders List or Live Waiting Empty State */}
       {filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-surface px-6 py-12 text-center">
-          <div className="flex size-12 items-center justify-center rounded-2xl bg-success-soft text-success">
-            <CheckCircle2 className="size-6" />
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-surface px-6 py-14 text-center">
+          <div className="flex size-14 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+            <CheckCircle2 className="size-7" />
           </div>
-          <h3 className="mt-3 text-[15px] font-semibold">لا توجد طلبات جديدة بانتظار التأكيد</h3>
-          <p className="mt-1 max-w-sm text-[12.5px] text-muted-foreground">
-            المنصة متصلة بشكل مباشر (LIVE) وسيتم إشعارك فور وصول أي طلب جديد من المتاجر أو الزبائن.
+          <h3 className="mt-3.5 text-[15.5px] font-semibold">لا توجد طلبات بانتظار التأكيد حالياً</h3>
+          <p className="mt-1.5 max-w-md text-[13px] text-muted-foreground leading-relaxed">
+            المنصة متصلة بشكل مباشر (<span className="font-semibold text-emerald-600 dark:text-emerald-400">LIVE</span>). فور وصول أي طلب جديد من متجرك الإلكتروني أو حملاتك الإعلانية سيظهر هنا فوراً مع رنين تنبيهي.
           </p>
+          <div className="mt-4 flex items-center gap-2 text-[12px] text-faint">
+            <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span>نظام الاستماع للطلبات يعمل ومفعّل</span>
+          </div>
         </div>
       ) : (
         <ul className="space-y-3">
           {filtered.map((r) => {
-            const risky = r.trust.band === "risky" || r.trust.band === "watch";
-            const Icon = r.trust.band === "new" ? ShieldQuestion : risky ? ShieldAlert : ShieldCheck;
+            const band = r.trust?.band ?? "neutral";
+            const risky = band === "risky" || band === "watch";
+            const Icon = band === "new" ? ShieldQuestion : risky ? ShieldAlert : ShieldCheck;
+            const fullName = r.fullName || "زبون";
+            const firstName = fullName.split(" ")[0] || "الزبون";
+            const amountStr = money(r.total || 0);
 
             return (
               <li
@@ -242,34 +276,34 @@ export function ConfirmQueue({ rows, enabled }: { rows: ConfirmRow[]; enabled: b
                 className="rounded-2xl border border-border bg-surface p-4 shadow-xs transition-all hover:border-primary/40"
               >
                 <div className="flex flex-wrap items-center gap-3">
-                  <Avatar name={r.fullName} size={40} hue={avatarHue(r.fullName)} />
+                  <Avatar name={fullName} size={40} hue={avatarHue(fullName)} />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-[14.5px] font-semibold">{r.fullName}</p>
+                      <p className="text-[14.5px] font-semibold">{fullName}</p>
                       <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-mono font-medium text-faint tnum">
                         {r.reference}
                       </span>
                       <span
                         className={cn(
                           "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold",
-                          r.trust.band === "risky"
+                          band === "risky"
                             ? "bg-error-soft text-error"
-                            : r.trust.band === "watch"
+                            : band === "watch"
                             ? "bg-warning-soft text-warning"
-                            : r.trust.band === "reliable"
+                            : band === "reliable"
                             ? "bg-success-soft text-success"
                             : "bg-muted text-muted-foreground"
                         )}
                       >
-                        <Icon className="size-3" /> {t(`trust.${r.trust.band}`)} ({r.trust.score}/100)
+                        <Icon className="size-3" /> {t(`trust.${band}`)} ({r.trust?.score ?? 50}/100)
                       </span>
                     </div>
                     <p className="mt-1 text-[12.5px] text-muted-foreground tnum" dir="ltr">
-                      {fmtPhone(r.phone)} · {r.city} · {t("confirm.awaiting")} {rel(r.createdAt)}
+                      {fmtPhone(r.phone)} · {r.city || "—"} · {t("confirm.awaiting")} {rel(r.createdAt)}
                     </p>
                   </div>
                   <div className="text-end">
-                    <span className="text-[18px] font-bold text-foreground tnum">{money(r.total)}</span>
+                    <span className="text-[18px] font-bold text-foreground tnum">{amountStr}</span>
                     <span className="block text-[11px] text-faint">الدفع عند الاستلام</span>
                   </div>
                 </div>
@@ -282,7 +316,7 @@ export function ConfirmQueue({ rows, enabled }: { rows: ConfirmRow[]; enabled: b
                     <Phone className="size-3.5" /> {t("common.call")}
                   </a>
                   <a
-                    href={waLink(r.phone, WA_CONFIRM(r.reference, r.fullName.split(" ")[0], money(r.total)))}
+                    href={waLink(r.phone, WA_CONFIRM(r.reference, firstName, amountStr))}
                     target="_blank"
                     rel="noreferrer"
                     className="flex h-9 items-center justify-center gap-1.5 rounded-xl border border-success/30 bg-success-soft text-[12.5px] font-semibold text-success transition-colors hover:bg-success-soft/80"
