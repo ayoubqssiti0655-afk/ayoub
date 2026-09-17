@@ -59,8 +59,9 @@ export function statusTone(status: string): "success" | "warning" | "error" | "i
     case "NEW": case "FAILED": return "error";
     case "RETURNED": return "violet";
     case "CANCELLED": case "WAIVED": return "neutral";
+    case "PENDING": return "warning";
     case "CONFIRMED": case "READY_FOR_PICKUP": case "PICKED_UP": case "IN_TRANSIT": case "OUT_FOR_DELIVERY":
-    case "ASSIGNED": case "REQUESTED": case "PENDING": case "PROCESSING": return "info";
+    case "ASSIGNED": case "REQUESTED": case "PROCESSING": return "info";
     case "RECEIVED": case "COMPLETED": case "PAID": case "SETTLED": case "COLLECTED": case "AVAILABLE": return "success";
     default: return "neutral";
   }

@@ -32,6 +32,13 @@ export function CourierCashPocket({
   const [note, setNote] = React.useState("");
   const [busy, setBusy] = React.useState(false);
 
+  // LA CAISSE Deposit State
+  const [depositOpen, setDepositOpen] = React.useState(false);
+  const [depositAmount, setDepositAmount] = React.useState("");
+  const [depositPhoto, setDepositPhoto] = React.useState("");
+  const [depositNote, setDepositNote] = React.useState("");
+  const [depositBusy, setDepositBusy] = React.useState(false);
+
   if (!enabled) return null;
 
   async function submitExpense() {
@@ -68,6 +75,39 @@ export function CourierCashPocket({
     }
   }
 
+  async function submitDeposit() {
+    const parsedAmount = Math.round(Number(depositAmount.replace(",", ".")) * 100);
+    if (!parsedAmount || parsedAmount <= 0) return;
+
+    setDepositBusy(true);
+    try {
+      const res = await fetch("/api/v1/courier/deposits", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: parsedAmount,
+          proofPhoto: depositPhoto || undefined,
+          note: depositNote || undefined,
+        }),
+      });
+
+      setDepositBusy(false);
+      if (res.ok) {
+        toast.push({ title: t("courier.cash.done"), variant: "success" });
+        setDepositOpen(false);
+        setDepositAmount("");
+        setDepositPhoto("");
+        setDepositNote("");
+        window.location.reload();
+      } else {
+        toast.push({ title: t("common.errorTitle"), variant: "error" });
+      }
+    } catch {
+      setDepositBusy(false);
+      toast.push({ title: t("common.errorTitle"), variant: "error" });
+    }
+  }
+
   return (
     <div className="rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 via-surface to-surface p-4 shadow-xs">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -81,15 +121,30 @@ export function CourierCashPocket({
           </div>
         </div>
 
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => setOpen(true)}
-          className="rounded-xl border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 font-semibold"
-        >
-          <Plus className="size-3.5" />
-          <span>{t("courier.pocket.addExpense")}</span>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setOpen(true)}
+            className="rounded-xl border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 font-semibold text-[11.5px]"
+          >
+            <Plus className="size-3.5" />
+            <span>{t("courier.pocket.addExpense")}</span>
+          </Button>
+
+          <Button
+            size="sm"
+            onClick={() => {
+              setDepositAmount(summary.remainingToday > 0 ? String(summary.remainingToday / 100) : "");
+              setDepositOpen(true);
+            }}
+            disabled={summary.collectedToday === 0 && summary.cashInHand === 0}
+            className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11.5px] shadow-sm"
+          >
+            <Banknote className="size-3.5" />
+            <span>{t("courier.cash.declare")}</span>
+          </Button>
+        </div>
       </div>
 
       <div className="mt-3.5 grid grid-cols-3 gap-2 text-center">
@@ -181,6 +236,68 @@ export function CourierCashPocket({
             onClick={submitExpense}
           >
             {t("common.confirm")}
+          </Button>
+        </div>
+      </BottomSheetSimple>
+
+      {/* LA CAISSE Deposit Modal */}
+      <BottomSheetSimple
+        title={t("courier.cash.title")}
+        open={depositOpen}
+        onClose={() => setDepositOpen(false)}
+      >
+        <div className="space-y-3.5">
+          <div>
+            <Label>{t("courier.cash.amount")}</Label>
+            <div className="relative mt-1.5">
+              <Input
+                value={depositAmount}
+                onChange={(e) => setDepositAmount(e.target.value)}
+                inputMode="decimal"
+                dir="ltr"
+                placeholder="0.00"
+                className="h-12 text-center text-[22px] font-bold tnum pe-12"
+                autoFocus
+              />
+              <span className="pointer-events-none absolute end-3 top-1/2 -translate-y-1/2 text-[14px] font-semibold text-faint">
+                DH
+              </span>
+            </div>
+            {summary.remainingToday > 0 && (
+              <button
+                type="button"
+                onClick={() => setDepositAmount(String(summary.remainingToday / 100))}
+                className="mt-1.5 text-[12px] font-medium text-emerald-600 dark:text-emerald-400 hover:underline"
+              >
+                {t("courier.cash.expected")} : {money(summary.remainingToday)}
+              </button>
+            )}
+          </div>
+
+          <div>
+            <Label>{t("courier.cash.proof")}</Label>
+            <div className="mt-1.5">
+              <PhotoInput onChange={(d) => setDepositPhoto(d ?? "")} compact />
+            </div>
+          </div>
+
+          <div>
+            <Label>{t("courier.cash.note")}</Label>
+            <Textarea
+              rows={2}
+              className="mt-1.5"
+              placeholder="ملاحظات حول إيداع الصندوق..."
+              value={depositNote}
+              onChange={(e) => setDepositNote(e.target.value)}
+            />
+          </div>
+
+          <Button
+            className="h-12 w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[15px] font-bold"
+            disabled={depositBusy || !depositAmount}
+            onClick={submitDeposit}
+          >
+            {depositBusy ? "..." : t("common.confirm")}
           </Button>
         </div>
       </BottomSheetSimple>

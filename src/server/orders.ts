@@ -325,14 +325,31 @@ export async function recordAttempt(deliveryId: string, input: AttemptInput, act
     await db.payment.updateMany({ where: { orderId: order.id }, data: { status: "COLLECTED", collectedAt: now } });
 
     // COD ledger: credit collection, debit delivery fee
+    // Stored as PENDING until courier deposits cash in LA CAISSE
     if (order.codAmount > 0) {
       await db.codTransaction.create({
-        data: { merchantId: order.merchantId, orderId: order.id, type: "COD_COLLECTION", amount: order.codAmount, status: "AVAILABLE", description: `Encaissement ${order.reference}`, occurredAt: now },
+        data: {
+          merchantId: order.merchantId,
+          orderId: order.id,
+          type: "COD_COLLECTION",
+          amount: order.codAmount,
+          status: "PENDING",
+          description: `Encaissement ${order.reference}`,
+          occurredAt: now,
+        },
       });
     }
     const quote = await quoteDelivery({ cityFr: order.deliveryCity });
     await db.codTransaction.create({
-      data: { merchantId: order.merchantId, orderId: order.id, type: "DELIVERY_FEE", amount: -quote.total, status: "AVAILABLE", description: `Frais de livraison ${order.reference} (${order.deliveryCity})`, occurredAt: now },
+      data: {
+        merchantId: order.merchantId,
+        orderId: order.id,
+        type: "DELIVERY_FEE",
+        amount: -quote.total,
+        status: "PENDING",
+        description: `Frais de livraison ${order.reference} (${order.deliveryCity})`,
+        occurredAt: now,
+      },
     });
     await recalcWallet(order.merchantId);
 

@@ -5,12 +5,15 @@ import { statusTone } from "@/lib/constants";
 import { useI18n } from "@/i18n/provider";
 
 /** Translated domain status pill (order / delivery / return / cod / settlement…). */
-export function StatusBadge({ status, dot = true, size }: { status: string; dot?: boolean; size?: "sm" }) {
+export function StatusBadge({ status, dot = true, size, type }: { status: string; dot?: boolean; size?: "sm"; type?: "cod" }) {
   const { t } = useI18n();
   const tone = statusTone(status) as Tone;
+  const label = type === "cod" && t(`codStatus.${status}`, {}) !== `codStatus.${status}`
+    ? t(`codStatus.${status}`)
+    : t(`status.${status}`);
   return (
     <Badge tone={tone} dot={dot} className={size === "sm" ? "px-1.5 py-0 text-[11px]" : undefined}>
-      {t(`status.${status}`)}
+      {label}
     </Badge>
   );
 }

@@ -574,7 +574,7 @@ export function WalletClient({
                     {money(tx.amount, { signed: true })}
                   </TD>
                   <TD>
-                    <StatusBadge status={tx.status} size="sm" />
+                    <StatusBadge status={tx.status} size="sm" type="cod" />
                   </TD>
                 </TR>
               ))}

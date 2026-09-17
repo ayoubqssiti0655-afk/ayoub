@@ -23,6 +23,7 @@ export default async function WalletPage({ searchParams }: { searchParams: Promi
     inTransitAgg,
     paidSettlementsAgg,
     feesAgg,
+    pendingInCaisseAgg,
     bankSetting,
     cycleChosenSetting,
     instantPayoutEnabled,
@@ -53,6 +54,10 @@ export default async function WalletPage({ searchParams }: { searchParams: Promi
     }),
     db.codTransaction.aggregate({
       where: { merchantId: ctx.merchant.id, type: { in: ["DELIVERY_FEE", "RETURN_FEE"] } },
+      _sum: { amount: true },
+    }),
+    db.codTransaction.aggregate({
+      where: { merchantId: ctx.merchant.id, type: "COD_COLLECTION", status: "PENDING" },
       _sum: { amount: true },
     }),
     db.setting.findUnique({ where: { key: `merchant_bank_${ctx.merchant.id}` } }),
@@ -98,9 +103,11 @@ export default async function WalletPage({ searchParams }: { searchParams: Promi
     }
   }
 
+  const pendingInCaisse = pendingInCaisseAgg._sum.amount ?? 0;
+  const inTransitCod = inTransitAgg._sum.codAmount ?? 0;
   const stats: WalletStats = {
     available: merchant.walletBalance,
-    pendingCod: inTransitAgg._sum.codAmount ?? 0,
+    pendingCod: inTransitCod + pendingInCaisse,
     totalPaidOut: paidSettlementsAgg._sum.netAmount ?? 0,
     totalFees: Math.abs(feesAgg._sum.amount ?? 0),
   };

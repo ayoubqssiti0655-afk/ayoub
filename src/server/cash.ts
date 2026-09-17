@@ -17,7 +17,7 @@ export async function cashSummary(courierId: string) {
       orderBy: { declaredAt: "desc" },
     }),
     db.delivery.aggregate({
-      where: { courierId, codCollected: { gt: 0 }, codStatus: "COLLECTED" },
+      where: { courierId, codCollected: { gt: 0 }, codStatus: { in: ["COLLECTED", "SETTLED"] } },
       _sum: { codCollected: true },
     }),
   ]);
@@ -66,10 +66,52 @@ export async function declareExpense(courierId: string, input: { amount: number;
   });
 }
 
+/**
+ * Release pending COD transactions for delivered parcels of a courier
+ * when deposited in LA CAISSE (or verified by admin).
+ * Updates merchant wallet balances accordingly.
+ */
+export async function releaseCourierPendingCod(courierId: string) {
+  const deliveries = await db.delivery.findMany({
+    where: { courierId, status: "DELIVERED" },
+    select: { id: true, orderId: true },
+  });
+  const orderIds = deliveries.map((d) => d.orderId).filter(Boolean);
+  if (orderIds.length === 0) return { releasedCount: 0 };
+
+  const pendingTxs = await db.codTransaction.findMany({
+    where: { orderId: { in: orderIds }, status: "PENDING" },
+    select: { id: true, merchantId: true },
+  });
+
+  if (pendingTxs.length > 0) {
+    await db.codTransaction.updateMany({
+      where: { id: { in: pendingTxs.map((t) => t.id) } },
+      data: { status: "AVAILABLE" },
+    });
+
+    const affectedMerchants = Array.from(new Set(pendingTxs.map((t) => t.merchantId)));
+    const { recalcWallet } = await import("@/server/orders");
+    for (const mId of affectedMerchants) {
+      await recalcWallet(mId);
+    }
+  }
+
+  await db.delivery.updateMany({
+    where: {
+      id: { in: deliveries.map((d) => d.id) },
+      codStatus: "COLLECTED",
+    },
+    data: { codStatus: "SETTLED" },
+  });
+
+  return { releasedCount: pendingTxs.length };
+}
+
 export async function declareDeposit(courierId: string, input: { amount: number; proofPhoto?: string; note?: string }) {
   const summary = await cashSummary(courierId);
   const expected = summary.remainingToday;
-  return db.courierDeposit.create({
+  const deposit = await db.courierDeposit.create({
     data: {
       courierId,
       amount: input.amount,
@@ -80,9 +122,18 @@ export async function declareDeposit(courierId: string, input: { amount: number;
       status: "DECLARED",
     },
   });
+
+  // When courier confirms in LA CAISSE, release pending COD to merchants
+  await releaseCourierPendingCod(courierId);
+
+  return deposit;
 }
 
 export async function setDepositStatus(depositId: string, status: "VERIFIED" | "MISMATCH", verifiedBy: string) {
-  return db.courierDeposit.update({ where: { id: depositId }, data: { status, verifiedAt: new Date(), verifiedBy } });
+  const deposit = await db.courierDeposit.update({ where: { id: depositId }, data: { status, verifiedAt: new Date(), verifiedBy } });
+  if (status === "VERIFIED") {
+    await releaseCourierPendingCod(deposit.courierId);
+  }
+  return deposit;
 }
 
