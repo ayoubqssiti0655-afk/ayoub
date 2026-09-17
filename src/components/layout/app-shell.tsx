@@ -89,6 +89,24 @@ export function AppShell({
     window.location.href = "/login";
   }
 
+  const [liveConfirmCount, setLiveConfirmCount] = React.useState<number | null>(null);
+
+  React.useEffect(() => {
+    if (!pathname.startsWith("/app")) return;
+    async function check() {
+      try {
+        const res = await fetch("/api/v1/confirmations");
+        if (res.ok) {
+          const d = await res.json();
+          if (typeof d.count === "number") setLiveConfirmCount(d.count);
+        }
+      } catch {}
+    }
+    check();
+    const interval = setInterval(check, 8000);
+    return () => clearInterval(interval);
+  }, [pathname]);
+
   const sidebar = (
     <div className="flex h-full flex-col">
       <div className="flex h-14 items-center px-4">
@@ -103,6 +121,9 @@ export function AppShell({
             <ul className="space-y-0.5">
               {section.items.map((item) => {
                 const active = pathname === item.href || (item.href !== "/app" && item.href !== "/admin" && item.href !== "/courier" && pathname.startsWith(item.href));
+                const isConfirmNav = item.href === "/app/confirmations";
+                const badgeCount = isConfirmNav ? (liveConfirmCount ?? item.badge) : item.badge;
+
                 return (
                   <li key={item.href}>
                     <a
@@ -112,9 +133,22 @@ export function AppShell({
                     >
                       <NavGlyph name={item.icon} />
                       <span className="truncate">{t(item.label)}</span>
-                      {item.badge ? (
+                      {isConfirmNav && (badgeCount ?? 0) > 0 ? (
+                        <span className="ms-auto flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10.5px] font-bold text-emerald-600 dark:text-emerald-400 tnum">
+                          <span className="relative flex size-2">
+                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                            <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
+                          </span>
+                          {badgeCount! > 99 ? "99+" : badgeCount}
+                        </span>
+                      ) : badgeCount ? (
                         <span className="ms-auto rounded-full bg-primary px-1.5 py-0.5 text-[10.5px] font-semibold text-primary-foreground tnum">
-                          {item.badge > 99 ? "99+" : item.badge}
+                          {badgeCount > 99 ? "99+" : badgeCount}
+                        </span>
+                      ) : isConfirmNav ? (
+                        <span className="ms-auto flex items-center gap-1 text-[10px] font-semibold text-emerald-500 opacity-80">
+                          <span className="size-1.5 rounded-full bg-emerald-500" />
+                          LIVE
                         </span>
                       ) : null}
                     </a>

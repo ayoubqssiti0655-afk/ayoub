@@ -45,6 +45,14 @@ export function OrderActions({
     return res.ok;
   }
 
+  React.useEffect(() => {
+    // Poll every 6 seconds to keep order status live
+    const interval = setInterval(() => {
+      router.refresh();
+    }, 6000);
+    return () => clearInterval(interval);
+  }, [router]);
+
   const cityCouriers = [...couriers].sort((a, b) => (a.city === b.city ? 0 : a.city === "Casablanca" ? -1 : 1));
 
   return (
