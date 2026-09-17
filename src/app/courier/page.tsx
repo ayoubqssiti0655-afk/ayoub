@@ -9,6 +9,8 @@ import { getFeatureMap } from "@/server/features";
 import { CashDeclaration } from "@/components/courier/cash-declaration";
 import { QrScanButton } from "@/components/courier/qr-scanner";
 import { BagReceive } from "@/components/courier/bag-receive";
+import { CourierCashPocket } from "@/components/courier/courier-cash-pocket";
+import { CourierClosureSheet } from "@/components/courier/courier-closure-sheet";
 
 export const metadata = { title: "Home" };
 
@@ -21,7 +23,7 @@ export default async function CourierHomePage() {
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
 
-  const [deliveries, allDelivered] = await Promise.all([
+  const [deliveries, allDelivered, returnsCount, failedCount] = await Promise.all([
     db.delivery.findMany({
       where: {
         courierId: courier.id,
@@ -35,6 +37,12 @@ export default async function CourierHomePage() {
     db.delivery.findMany({
       where: { courierId: courier.id, deliveredAt: { gte: startOfToday } },
       select: { codCollected: true },
+    }),
+    db.return.count({
+      where: { courierId: courier.id, status: "ASSIGNED" },
+    }),
+    db.delivery.count({
+      where: { courierId: courier.id, status: "FAILED", updatedAt: { gte: startOfToday } },
     }),
   ]);
 
@@ -69,14 +77,40 @@ export default async function CourierHomePage() {
 
   const earnedToday = allDelivered.length * courier.feePerDelivery;
   const codToday = allDelivered.reduce((a, d) => a + d.codCollected, 0);
-  const failedToday = 0;
+
+  const closureData = {
+    courierName: user.name,
+    courierCode: courier.employeeCode,
+    deliveredCount: allDelivered.length,
+    returnedCount: returnsCount,
+    postponedCount: failedCount,
+    totalAssigned: deliveries.length + allDelivered.length,
+    codCollected: cash.collectedToday,
+    expensesTotal: cash.expensesToday,
+    netDue: cash.remainingToday,
+  };
 
   return (
     <>
-      <h1 className="text-[20px] font-semibold tracking-[-0.02em]">
-        {i.t("courier.greeting", { name: user.name.split(" ")[0] })}
-      </h1>
-      <p className="mt-0.5 text-[13px] text-muted-foreground">{i.t("courier.subtitle")}</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-[20px] font-bold tracking-[-0.02em]">
+            {i.t("courier.greeting", { name: user.name.split(" ")[0] })}
+          </h1>
+          <p className="mt-0.5 text-[13px] text-muted-foreground">{i.t("courier.subtitle")}</p>
+        </div>
+
+        {features.qr_labels && (
+          <QrScanButton continuousEnabled={features.courier_batch_scan} />
+        )}
+      </div>
+
+      {/* Cash Pocket & Expenses Card */}
+      {features.courier_cash_pocket && (
+        <div className="mt-4">
+          <CourierCashPocket summary={cash} enabled={features.courier_cash_pocket} />
+        </div>
+      )}
 
       <CourierHomeClient
         deliveries={sortedRows}
@@ -84,14 +118,23 @@ export default async function CourierHomePage() {
         feePerDelivery={courier.feePerDelivery}
         earnedToday={earnedToday}
         codToday={codToday}
-        failedToday={failedToday}
+        failedToday={failedCount}
         scanEnabled={features.qr_labels}
         slotEnabled={features.delivery_slots}
+        quickActionsEnabled={features.courier_quick_actions}
+        batchScanEnabled={features.courier_batch_scan}
       />
 
       {sealedBags.length > 0 && (
         <div className="mt-4">
           <BagReceive bags={sealedBags.map((b) => ({ id: b.id, reference: b.reference, city: b.city, parcelCount: (JSON.parse(b.parcelRefs) as string[]).length }))} />
+        </div>
+      )}
+
+      {/* End of Day Tour Closure Sheet */}
+      {features.courier_closure && (
+        <div className="mt-4">
+          <CourierClosureSheet data={closureData} enabled={features.courier_closure} />
         </div>
       )}
 
@@ -101,3 +144,4 @@ export default async function CourierHomePage() {
     </>
   );
 }
+

@@ -37,6 +37,10 @@ export const FEATURES = [
   { key: "weight_capture", icon: "Weight" },
   { key: "promo_codes", icon: "TicketPercent" },
   { key: "delivery_control_center", icon: "Truck" },
+  { key: "courier_quick_actions", icon: "Navigation" },
+  { key: "courier_cash_pocket", icon: "Receipt" },
+  { key: "courier_batch_scan", icon: "ScanLine" },
+  { key: "courier_closure", icon: "CheckSquare" },
 ] as const;
 
 export type FeatureKey = (typeof FEATURES)[number]["key"];

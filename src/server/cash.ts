@@ -22,22 +22,48 @@ export async function cashSummary(courierId: string) {
     }),
   ]);
 
-  const declared = deposits.filter((d) => d.status !== "MISMATCH").reduce((a, d) => a + d.amount, 0);
+  const declaredDeposits = deposits.filter((d) => d.status === "DECLARED" || d.status === "VERIFIED");
+  const expensesList = deposits.filter((d) => d.status === "EXPENSE");
+  const totalExpensesToday = expensesList.reduce((a, d) => a + d.amount, 0);
+  const declared = declaredDeposits.reduce((a, d) => a + d.amount, 0);
   const collectedToday = collectedAgg._sum.codCollected ?? 0;
   const allTimeCollected = openBalanceAgg._sum.codCollected ?? 0;
   const allTimeDeclaredAgg = await db.courierDeposit.aggregate({
     where: { courierId, status: { in: ["DECLARED", "VERIFIED"] } },
     _sum: { amount: true },
   });
+  const allTimeExpensesAgg = await db.courierDeposit.aggregate({
+    where: { courierId, status: "EXPENSE" },
+    _sum: { amount: true },
+  });
+
+  const netCashInHand = Math.max(
+    0,
+    allTimeCollected - (allTimeDeclaredAgg._sum.amount ?? 0) - (allTimeExpensesAgg._sum.amount ?? 0)
+  );
 
   return {
     collectedToday,
     declaredToday: declared,
-    remainingToday: collectedToday - declared,
+    expensesToday: totalExpensesToday,
+    remainingToday: Math.max(0, collectedToday - totalExpensesToday - declared),
     depositsToday: deposits,
-    // total cash in hand across all days (never fully covered by deposits)
-    cashInHand: Math.max(0, allTimeCollected - (allTimeDeclaredAgg._sum.amount ?? 0)),
+    cashInHand: netCashInHand,
   };
+}
+
+export async function declareExpense(courierId: string, input: { amount: number; type: string; proofPhoto?: string; note?: string }) {
+  return db.courierDeposit.create({
+    data: {
+      courierId,
+      amount: input.amount,
+      expectedAmount: 0,
+      difference: -input.amount,
+      proofPhoto: input.proofPhoto,
+      note: `[EXPENSE:${input.type}] ${input.note ?? ""}`.trim(),
+      status: "EXPENSE",
+    },
+  });
 }
 
 export async function declareDeposit(courierId: string, input: { amount: number; proofPhoto?: string; note?: string }) {
@@ -59,3 +85,4 @@ export async function declareDeposit(courierId: string, input: { amount: number;
 export async function setDepositStatus(depositId: string, status: "VERIFIED" | "MISMATCH", verifiedBy: string) {
   return db.courierDeposit.update({ where: { id: depositId }, data: { status, verifiedAt: new Date(), verifiedBy } });
 }
+

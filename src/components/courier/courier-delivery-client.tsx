@@ -9,6 +9,7 @@ import { Select, Textarea, Label } from "@/components/ui/input";
 import { StatusBadge } from "@/components/status-badge";
 import { useToast } from "@/components/ui/toast";
 import { PhotoInput } from "@/components/courier/photo-input";
+import { CourierNavAction, CourierWhatsAppActions } from "@/components/courier/courier-quick-actions";
 import { cn } from "@/lib/utils";
 import { mapsLink, waLink } from "@/lib/format";
 
@@ -127,27 +128,25 @@ export function CourierDeliveryClient({ d, exchangeEnabled = true }: { d: Courie
         )}
 
         <div className="mt-3.5 grid grid-cols-3 gap-2">
-          <a href={`tel:${d.customerPhone}`} className="flex h-11 flex-col items-center justify-center gap-0.5 rounded-xl bg-primary text-[11px] font-semibold text-primary-foreground">
+          <a href={`tel:${d.customerPhone}`} className="flex h-11 flex-col items-center justify-center gap-0.5 rounded-xl bg-primary text-[11px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">
             <Phone className="size-4" /> {t("common.call")}
           </a>
-          <a
-            href={waLink(
-              d.customerPhone,
-              t("whatsapp.courierMessage", {
-                name: d.customerName,
-                cod: d.codAmount > 0 ? money(d.codAmount) : t("payment.PREPAID"),
-                merchant: d.merchantName,
-              })
-            )}
-            target="_blank"
-            rel="noreferrer"
-            className="flex h-11 flex-col items-center justify-center gap-0.5 rounded-xl border border-border text-[11px] font-semibold transition-colors hover:border-[#25D366]/40 hover:bg-[#25D366]/10"
-          >
-            <MessageCircle className="size-4 text-[#25D366]" /> WhatsApp
-          </a>
-          <a href={mapsLink(d.gpsLat, d.gpsLng, `${d.address}, ${d.city}`)} target="_blank" rel="noreferrer" className="flex h-11 flex-col items-center justify-center gap-0.5 rounded-xl border border-border text-[11px] font-semibold">
-            <MapPin className="size-4" /> {t("common.navigate")}
-          </a>
+          <CourierWhatsAppActions
+            customerName={d.customerName}
+            customerPhone={d.customerPhone}
+            reference={d.reference}
+            codAmount={d.codAmount}
+            size="default"
+            className="h-11 flex-col text-[11px] rounded-xl"
+          />
+          <CourierNavAction
+            address={d.address}
+            city={d.city}
+            lat={d.gpsLat}
+            lng={d.gpsLng}
+            size="default"
+            className="h-11 flex-col text-[11px] rounded-xl"
+          />
         </div>
       </div>
 
@@ -297,8 +296,29 @@ export function CourierDeliveryClient({ d, exchangeEnabled = true }: { d: Courie
               </div>
             </div>
             <div>
-              <Label>{t("courier.noteLabel")}</Label>
-              <Textarea rows={2} className="mt-1.5" value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("courier.notePlaceholder")} />
+              <div className="flex items-center justify-between">
+                <Label>{t("courier.noteLabel")}</Label>
+                <span className="text-[11px] text-faint">نقرة سريعة</span>
+              </div>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {[
+                  t("courier.notes.doorbellBroken"),
+                  t("courier.notes.concierge"),
+                  t("courier.notes.callHusband"),
+                  t("courier.notes.traveling"),
+                  t("courier.notes.wrongNumber"),
+                ].map((chip) => (
+                  <button
+                    key={chip}
+                    type="button"
+                    onClick={() => setNote((prev) => (prev ? `${prev} - ${chip}` : chip))}
+                    className="rounded-lg border border-border bg-surface-2 px-2 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary-soft/40 hover:text-primary"
+                  >
+                    + {chip}
+                  </button>
+                ))}
+              </div>
+              <Textarea rows={2} className="mt-2" value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("courier.notePlaceholder")} />
             </div>
           </div>
           <div className="mt-4 grid grid-cols-2 gap-2">

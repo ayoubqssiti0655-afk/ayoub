@@ -4,7 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import {
   MessageCircle, ShieldCheck, Wand2, Wallet, RadioTower, ScanLine, BellRing,
-  CreditCard, RefreshCcw, Sparkles, Circle, Truck, Zap,
+  CreditCard, RefreshCcw, Sparkles, Circle, Truck, Zap, Navigation, Receipt, CheckSquare, Bike,
 } from "lucide-react";
 import { useI18n } from "@/i18n/provider";
 import { Switch } from "@/components/ui/misc";
@@ -12,7 +12,7 @@ import { useToast } from "@/components/ui/toast";
 import { setFeatureAction } from "@/server/admin-actions";
 
 const ICONS: Record<string, React.ComponentType<{ className?: string; strokeWidth?: number }>> = {
-  MessageCircle, ShieldCheck, Wand2, Wallet, RadioTower, ScanLine, BellRing, CreditCard, RefreshCcw, Sparkles, Circle, Truck, Zap,
+  MessageCircle, ShieldCheck, Wand2, Wallet, RadioTower, ScanLine, BellRing, CreditCard, RefreshCcw, Sparkles, Circle, Truck, Zap, Navigation, Receipt, CheckSquare, Bike,
 };
 
 export type FeatureRow = { key: string; icon: string; enabled: boolean };

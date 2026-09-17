@@ -8,6 +8,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { DeliveryMap, type MapPoint } from "@/components/map";
 import { EmptyState } from "@/components/shared";
 import { QrScanButton } from "@/components/courier/qr-scanner";
+import { CourierNavAction, CourierWhatsAppActions } from "@/components/courier/courier-quick-actions";
 import { cn, DH } from "@/lib/utils";
 
 export type CourierDelivery = {
@@ -20,6 +21,7 @@ export type CourierDelivery = {
 
 export function CourierHomeClient({
   deliveries, courierName, feePerDelivery, earnedToday, codToday, failedToday, scanEnabled = true, slotEnabled = true,
+  quickActionsEnabled = true, batchScanEnabled = true,
 }: {
   deliveries: CourierDelivery[];
   courierName: string;
@@ -29,6 +31,8 @@ export function CourierHomeClient({
   failedToday: number;
   scanEnabled?: boolean;
   slotEnabled?: boolean;
+  quickActionsEnabled?: boolean;
+  batchScanEnabled?: boolean;
 }) {
   const { t, money, num } = useI18n();
   const [view, setView] = React.useState<"list" | "map">("list");
@@ -71,7 +75,7 @@ export function CourierHomeClient({
       <div>
         <div className="mb-2.5 flex items-center justify-between">
           <h2 className="text-[15px] font-semibold">{t("courier.deliveriesTitle")}</h2>
-          {deliveries.length > 0 && scanEnabled && <QrScanButton />}
+          {deliveries.length > 0 && scanEnabled && <QrScanButton continuousEnabled={batchScanEnabled} />}
           <div className="flex rounded-lg border border-border bg-surface p-0.5">
             <button onClick={() => setView("list")} className={cn("flex items-center gap-1 rounded-md px-2.5 py-1 text-[11.5px] font-medium", view === "list" ? "bg-primary-soft text-primary" : "text-muted-foreground")}>
               <List className="size-3" /> {t("courier.list")}
@@ -124,17 +128,32 @@ export function CourierHomeClient({
                     <MapPin className="mt-0.5 size-3.5 shrink-0" />
                     {d.address}
                   </p>
-                  <div className="mt-2.5 flex gap-2">
+                  <div className="mt-2.5 flex flex-wrap gap-2">
                     <a
                       href={`tel:${d.customerPhone}`}
                       onClick={(e) => e.stopPropagation()}
-                      className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary text-[12px] font-semibold text-primary-foreground"
+                      className="flex h-8 flex-1 min-w-24 items-center justify-center gap-1.5 rounded-lg bg-primary text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
                     >
                       <Phone className="size-3.5" /> {t("common.call")}
                     </a>
-                    <span className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg border border-border text-[12px] font-medium text-muted-foreground">
-                      <MapPin className="size-3.5" /> {t("common.navigate")}
-                    </span>
+                    {quickActionsEnabled && (
+                      <>
+                        <CourierNavAction
+                          address={d.address}
+                          city={d.city}
+                          lat={d.gpsLat}
+                          lng={d.gpsLng}
+                          className="flex-1 min-w-24"
+                        />
+                        <CourierWhatsAppActions
+                          customerName={d.customerName}
+                          customerPhone={d.customerPhone}
+                          reference={d.reference}
+                          codAmount={d.codAmount}
+                          className="flex-1 min-w-24"
+                        />
+                      </>
+                    )}
                   </div>
                 </Link>
               </li>
