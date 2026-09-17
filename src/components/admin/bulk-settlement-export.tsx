@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input, Select } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { adminSaveMerchantBankAction } from "@/server/admin-actions";
+import { adminSaveMerchantBankAction, markSettlementPaidAction } from "@/server/admin-actions";
 import { useToast } from "@/components/ui/toast";
 
 const MOROCCAN_BANKS = [
@@ -28,6 +28,7 @@ const MOROCCAN_BANKS = [
 ];
 
 export type MerchantPayoutRow = {
+  id?: string;
   merchantId: string;
   merchantName: string;
   phone: string;
@@ -38,6 +39,11 @@ export type MerchantPayoutRow = {
   bankName: string;
   rib: string;
   accountHolder: string;
+  source?: "SETTLEMENT_REQUEST" | "WALLET_BALANCE";
+  reference?: string;
+  settlementId?: string;
+  method?: string;
+  createdAt?: string;
 };
 
 export function BulkSettlementExport({
@@ -58,6 +64,12 @@ export function BulkSettlementExport({
   const [rib, setRib] = React.useState("");
   const [accountHolder, setAccountHolder] = React.useState("");
   const [saving, setSaving] = React.useState(false);
+
+  // Pay settlement modal state
+  const [payingSettlement, setPayingSettlement] = React.useState<MerchantPayoutRow | null>(null);
+  const [paymentReference, setPaymentReference] = React.useState("");
+  const [paymentNote, setPaymentNote] = React.useState("");
+  const [paying, setPaying] = React.useState(false);
 
   React.useEffect(() => {
     setRows(initialRows);
@@ -117,6 +129,27 @@ export function BulkSettlementExport({
     }
   }
 
+  async function handleMarkPaid() {
+    if (!payingSettlement || !payingSettlement.settlementId) return;
+    setPaying(true);
+    const res = await markSettlementPaidAction(payingSettlement.settlementId, {
+      paymentReference: paymentReference.trim() || undefined,
+      paymentNote: paymentNote.trim() || undefined,
+    });
+    setPaying(false);
+
+    if (res.ok) {
+      toast.push({ title: "تم اعتماد وصرف المستحقات للتاجر بنجاح", variant: "success" });
+      setRows((prev) => prev.filter((r) => r.settlementId !== payingSettlement.settlementId));
+      setPayingSettlement(null);
+      setPaymentReference("");
+      setPaymentNote("");
+      router.refresh();
+    } else {
+      toast.push({ title: res.message ?? "تعذر اعتماد الدفع", variant: "error" });
+    }
+  }
+
   function exportBankFile(bankType: "STANDARD" | "CIH" | "ATTIJARI") {
     if (readyWithRib.length === 0) {
       toast.push({ title: "لا يوجد تجار بحسابات بنكية (RIB) مكتملة للتصدير", variant: "error" });
@@ -129,7 +162,9 @@ export function BulkSettlementExport({
     readyWithRib.forEach((r) => {
       const cleanRib = r.rib.replace(/\D/g, "");
       const name = r.accountHolder || r.merchantName;
-      const motif = `REGLEMENT COD ${r.merchantName.slice(0, 15)} ${dateStr}`;
+      const motif = r.reference
+        ? `VIREMENT ${r.reference} ${r.merchantName.slice(0, 15)} ${dateStr}`
+        : `REGLEMENT COD ${r.merchantName.slice(0, 15)} ${dateStr}`;
       content += `"${cleanRib}","${name.replace(/"/g, '""')}",${r.amountDh.toFixed(2)},"${motif}","${dateStr}"\n`;
     });
 
@@ -202,7 +237,7 @@ export function BulkSettlementExport({
           <table className="w-full text-start text-[12px]">
             <thead className="sticky top-0 bg-surface-2 text-muted-foreground border-b border-border text-[11.5px]">
               <tr>
-                <th className="py-2.5 px-3 text-start font-semibold">التاجر</th>
+                <th className="py-2.5 px-3 text-start font-semibold">التاجر / نوع المستحق</th>
                 <th className="py-2.5 px-3 text-start font-semibold">البنك</th>
                 <th className="py-2.5 px-3 text-start font-semibold">رقم الـ RIB (24 رقم)</th>
                 <th className="py-2.5 px-3 text-end font-semibold">المبلغ المستحق</th>
@@ -213,50 +248,85 @@ export function BulkSettlementExport({
               {rows.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="py-6 text-center text-muted-foreground text-[12.5px]">
-                    لا توجد مستحقات سحب تفوق 200 درهم في الوقت الحالي
+                    لا توجد طلبات سحب معلقة أو مستحقات تفوق 200 درهم في الوقت الحالي
                   </td>
                 </tr>
               ) : (
-                rows.map((r) => (
-                  <tr key={r.merchantId} className="hover:bg-surface-2 transition-colors">
-                    <td className="py-2.5 px-3 font-semibold text-foreground">
-                      {r.merchantName}
-                      <span className="block text-[10.5px] font-normal text-muted-foreground">{r.city}</span>
-                    </td>
-                    <td className="py-2.5 px-3 text-muted-foreground">{r.bankName}</td>
-                    <td className="py-2.5 px-3">
-                      {r.hasRib ? (
-                        <span className="font-mono text-[11px] text-foreground bg-muted/60 px-1.5 py-0.5 rounded">
-                          {r.rib.slice(0, 7)}...{r.rib.slice(-4)}
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => openEditRib(r)}
-                          className="inline-flex items-center gap-1 text-amber-600 hover:underline font-semibold text-[11px]"
-                        >
-                          <Badge tone="warning" className="text-[11px] px-1.5 py-0 cursor-pointer">
-                            بانتظار الـ RIB ⚠️
+                rows.map((r) => {
+                  const rowKey = r.id || r.settlementId || r.merchantId;
+                  return (
+                    <tr key={rowKey} className="hover:bg-surface-2 transition-colors">
+                      <td className="py-2.5 px-3 font-semibold text-foreground">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span>{r.merchantName}</span>
+                          {r.source === "SETTLEMENT_REQUEST" ? (
+                            <Badge tone="info" className="text-[10px] px-1.5 py-0 font-medium">
+                              طلب سحب {r.reference}
+                            </Badge>
+                          ) : (
+                            <Badge tone="neutral" className="text-[10px] px-1.5 py-0 font-medium">
+                            رصيد محفظة
                           </Badge>
-                        </button>
-                      )}
-                    </td>
-                    <td className="py-2.5 px-3 text-end font-bold text-primary tnum">
-                      {money(r.amountCentimes)}
-                    </td>
-                    <td className="py-2.5 px-3 text-center">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 text-[11px] px-2 gap-1 text-primary hover:bg-primary/10"
-                        onClick={() => openEditRib(r)}
-                      >
-                        <Edit2 className="size-3" />
-                        <span>{r.hasRib ? "تعديل" : "إدخال RIB"}</span>
-                      </Button>
-                    </td>
-                  </tr>
-                ))
+                          )}
+                        </div>
+                        <span className="block text-[10.5px] font-normal text-muted-foreground">{r.city}</span>
+                      </td>
+                      <td className="py-2.5 px-3 text-muted-foreground">{r.bankName}</td>
+                      <td className="py-2.5 px-3">
+                        {r.hasRib ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono text-[11px] text-foreground bg-muted/60 px-1.5 py-0.5 rounded">
+                              {r.rib.slice(0, 4)} {r.rib.slice(4, 8)} ... {r.rib.slice(-4)}
+                            </span>
+                            <CheckCircle2 className="size-3.5 text-emerald-600 shrink-0" />
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => openEditRib(r)}
+                            className="inline-flex items-center gap-1 text-amber-600 hover:underline font-semibold text-[11px]"
+                          >
+                            <Badge tone="warning" className="text-[11px] px-1.5 py-0 cursor-pointer">
+                              بانتظار الـ RIB ⚠️
+                            </Badge>
+                          </button>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3 text-end font-bold text-primary tnum">
+                        {money(r.amountCentimes)}
+                      </td>
+                      <td className="py-2.5 px-3 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 text-[11px] px-2 gap-1 text-primary hover:bg-primary/10"
+                            onClick={() => openEditRib(r)}
+                          >
+                            <Edit2 className="size-3" />
+                            <span>{r.hasRib ? "تعديل" : "إدخال RIB"}</span>
+                          </Button>
+
+                          {r.settlementId && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-[11px] px-2 gap-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 border-emerald-500/30 font-semibold"
+                              onClick={() => {
+                                setPayingSettlement(r);
+                                setPaymentReference("");
+                                setPaymentNote("");
+                              }}
+                            >
+                              <CheckCircle2 className="size-3" />
+                              <span>تأكيد الدفع</span>
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -334,6 +404,57 @@ export function BulkSettlementExport({
               onClick={handleSaveRib}
             >
               {t("common.save")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog for Admin to confirm payment */}
+      <Dialog open={Boolean(payingSettlement)} onOpenChange={(open) => !open && setPayingSettlement(null)}>
+        <DialogContent size="sm">
+          <DialogTitle>
+            تأكيد صرف وتحويل مستحقات: {payingSettlement?.merchantName}
+          </DialogTitle>
+          <DialogDescription>
+            المبلغ المستحق: <strong className="text-primary font-mono">{payingSettlement ? money(payingSettlement.amountCentimes) : ""}</strong> | الحساب: {payingSettlement?.bankName} ({payingSettlement?.rib})
+          </DialogDescription>
+
+          <div className="mt-4 space-y-3">
+            <div>
+              <label className="mb-1 block text-[12px] font-medium text-muted-foreground">
+                رقم الحوالة أو المرجع البنكي (Référence du virement)
+              </label>
+              <Input
+                value={paymentReference}
+                onChange={(e) => setPaymentReference(e.target.value)}
+                placeholder="Ex: VIR-CIH-2026-94812"
+                className="h-9 text-[12.5px] font-mono"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-[12px] font-medium text-muted-foreground">
+                ملاحظة إضافية (Optionnel)
+              </label>
+              <Input
+                value={paymentNote}
+                onChange={(e) => setPaymentNote(e.target.value)}
+                placeholder="Ex: تم التحويل بنجاح"
+                className="h-9 text-[12.5px]"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setPayingSettlement(null)}>
+              {t("common.cancel")}
+            </Button>
+            <Button
+              disabled={paying}
+              onClick={handleMarkPaid}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+            >
+              {paying ? "جاري الاعتماد..." : "تأكيد التحويل (Marquer payé)"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -12,7 +12,7 @@ export default async function AdminSettlementsPage({ searchParams }: { searchPar
   const { merchant: merchantId } = await searchParams;
   const features = await getFeatureMap();
 
-  const [settlements, eligibleMerchants] = await Promise.all([
+  const [settlements, pendingSettlements, eligibleMerchants] = await Promise.all([
     db.settlement.findMany({
       where: merchantId ? { merchantId } : undefined,
       include: { merchant: { select: { name: true } } },
@@ -20,8 +20,23 @@ export default async function AdminSettlementsPage({ searchParams }: { searchPar
       take: 60,
     }),
     features.admin_bank_settlement_export
+      ? db.settlement.findMany({
+          where: {
+            status: "PROCESSING",
+            ...(merchantId ? { merchantId } : {}),
+          },
+          include: {
+            merchant: { select: { id: true, name: true, phone: true, city: true } },
+          },
+          orderBy: { createdAt: "asc" },
+        })
+      : [],
+    features.admin_bank_settlement_export
       ? db.merchant.findMany({
-          where: { walletBalance: { gte: 20000 } },
+          where: {
+            walletBalance: { gte: 20000 },
+            ...(merchantId ? { id: merchantId } : {}),
+          },
           select: { id: true, name: true, phone: true, city: true, walletBalance: true },
           orderBy: { walletBalance: "desc" },
         })
@@ -29,8 +44,14 @@ export default async function AdminSettlementsPage({ searchParams }: { searchPar
   ]);
 
   let payoutRows: MerchantPayoutRow[] = [];
-  if (features.admin_bank_settlement_export && eligibleMerchants.length > 0) {
-    const bankKeys = eligibleMerchants.map((m) => `merchant_bank_${m.id}`);
+  if (features.admin_bank_settlement_export && (pendingSettlements.length > 0 || eligibleMerchants.length > 0)) {
+    const allMerchantIds = Array.from(
+      new Set([
+        ...pendingSettlements.map((s) => s.merchant.id),
+        ...eligibleMerchants.map((m) => m.id),
+      ])
+    );
+    const bankKeys = allMerchantIds.map((mId) => `merchant_bank_${mId}`);
     const bankSettings = await db.setting.findMany({
       where: { key: { in: bankKeys } },
     });
@@ -42,21 +63,53 @@ export default async function AdminSettlementsPage({ searchParams }: { searchPar
       } catch {}
     }
 
-    payoutRows = eligibleMerchants.map((m) => {
+    // 1. Pending settlement requests (طلبات السحب المعلقة قيد التنفيذ)
+    for (const s of pendingSettlements) {
+      const bank = bankMap.get(s.merchant.id);
+      const cleanRib = bank?.rib ? bank.rib.replace(/\D/g, "") : "";
+      payoutRows.push({
+        id: `settlement_${s.id}`,
+        settlementId: s.id,
+        reference: s.reference,
+        merchantId: s.merchant.id,
+        merchantName: s.merchant.name,
+        phone: s.merchant.phone,
+        city: s.merchant.city ?? "",
+        amountCentimes: s.netAmount,
+        amountDh: s.netAmount / 100,
+        hasRib: cleanRib.length === 24,
+        bankName: bank?.bankName ?? "Non renseigné",
+        rib: bank?.rib ?? "",
+        accountHolder: bank?.accountHolder ?? s.merchant.name,
+        source: "SETTLEMENT_REQUEST",
+        method: s.method,
+        createdAt: s.createdAt.toISOString(),
+      });
+    }
+
+    // 2. Merchants with accumulated wallet balance >= 200 DH who haven't requested yet
+    const pendingMerchantIds = new Set(pendingSettlements.map((s) => s.merchant.id));
+    for (const m of eligibleMerchants) {
+      // If merchant already has a pending settlement and 0 extra balance, skip to avoid confusion
+      if (pendingMerchantIds.has(m.id) && m.walletBalance < 20000) continue;
+
       const bank = bankMap.get(m.id);
-      return {
+      const cleanRib = bank?.rib ? bank.rib.replace(/\D/g, "") : "";
+      payoutRows.push({
+        id: `wallet_${m.id}`,
         merchantId: m.id,
         merchantName: m.name,
         phone: m.phone,
         city: m.city ?? "",
         amountCentimes: m.walletBalance,
         amountDh: m.walletBalance / 100,
-        hasRib: !!bank?.rib,
+        hasRib: cleanRib.length === 24,
         bankName: bank?.bankName ?? "Non renseigné",
         rib: bank?.rib ?? "",
         accountHolder: bank?.accountHolder ?? m.name,
-      };
-    });
+        source: "WALLET_BALANCE",
+      });
+    }
   }
 
   const rows: SettlementRowView[] = settlements.map((s) => ({

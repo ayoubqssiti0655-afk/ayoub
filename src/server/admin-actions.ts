@@ -246,6 +246,25 @@ export async function markSettlementPaidAction(id: string, input?: { paymentRefe
   } catch (e) { return fail(e); }
 }
 
+export async function bulkMarkSettlementsPaidAction(
+  settlementIds: string[],
+  input?: { paymentReference?: string; paymentNote?: string }
+): Promise<AdminResult> {
+  try {
+    const admin = await requireAdmin();
+    for (const id of settlementIds) {
+      try {
+        await markSettlementPaid(id, { id: admin.id, name: admin.name, type: "ADMIN" }, input);
+      } catch (err) {
+        console.error(`Failed to mark settlement ${id} as paid:`, err);
+      }
+    }
+    revalidatePath("/admin/settlements");
+    revalidatePath("/app/wallet");
+    return { ok: true };
+  } catch (e) { return fail(e); }
+}
+
 export async function setFeatureAction(key: string, enabled: boolean): Promise<AdminResult> {
   try {
     const admin = await requireAdmin();
