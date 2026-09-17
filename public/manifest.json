@@ -1,0 +1,16 @@
+{
+  "name": "Masar Courier · مسار",
+  "short_name": "Masar",
+  "description": "Livraison COD — tournée, preuves et encaissements pour les livreurs Masar.",
+  "start_url": "/courier",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b0d12",
+  "theme_color": "#2f45e0",
+  "lang": "fr",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

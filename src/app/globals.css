@@ -1,0 +1,215 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ── Masar design tokens ─────────────────────────────────────────
+   Brand: "Majorelle" cobalt. Neutral surfaces with a cool tint.
+   Status hues: success=green, warning=amber, error=red, info=blue,
+   violet=returned, neutral=cancelled. */
+
+:root {
+  --background: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #fbfbfc;
+  --foreground: #16181d;
+  --muted: #eef0f3;
+  --muted-foreground: #5f6673;
+  --faint-foreground: #8a919e;
+  --border: #e5e8ee;
+  --border-strong: #d3d8e1;
+  --input-bg: #ffffff;
+
+  --primary: #2f45e0;
+  --primary-hover: #2839c4;
+  --primary-foreground: #ffffff;
+  --primary-soft: #edefff;
+  --primary-ring: rgba(47, 69, 224, 0.28);
+
+  --success: #0e8345;
+  --success-soft: #e5f5ec;
+  --warning: #b45309;
+  --warning-soft: #fdf2e2;
+  --error: #d92d20;
+  --error-soft: #feecea;
+  --info: #1570ef;
+  --info-soft: #eaf3ff;
+  --violet: #6941c6;
+  --violet-soft: #f1ecfd;
+
+  --chart-1: #2f45e0;
+  --chart-2: #0e8345;
+  --chart-3: #1570ef;
+  --chart-4: #b45309;
+  --chart-5: #6941c6;
+
+  --shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow-sm: 0 1px 3px rgba(16, 24, 40, 0.07), 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow-md: 0 4px 12px -2px rgba(16, 24, 40, 0.09), 0 2px 4px rgba(16, 24, 40, 0.04);
+  --shadow-lg: 0 16px 40px -8px rgba(16, 24, 40, 0.16);
+
+  --radius: 10px;
+}
+
+.dark {
+  --background: #0b0d12;
+  --surface: #11141b;
+  --surface-2: #151924;
+  --foreground: #e8eaf1;
+  --muted: #1b202b;
+  --muted-foreground: #99a1b3;
+  --faint-foreground: #6d7689;
+  --border: #212734;
+  --border-strong: #2c3342;
+  --input-bg: #0f1218;
+
+  --primary: #6470f3;
+  --primary-hover: #7d88f5;
+  --primary-foreground: #ffffff;
+  --primary-soft: rgba(100, 112, 243, 0.14);
+  --primary-ring: rgba(100, 112, 243, 0.35);
+
+  --success: #3ccb7f;
+  --success-soft: rgba(60, 203, 127, 0.13);
+  --warning: #f0a63a;
+  --warning-soft: rgba(240, 166, 58, 0.13);
+  --error: #f97066;
+  --error-soft: rgba(249, 112, 102, 0.13);
+  --info: #53b1fd;
+  --info-soft: rgba(83, 177, 253, 0.13);
+  --violet: #a78bfa;
+  --violet-soft: rgba(167, 139, 250, 0.13);
+
+  --chart-1: #6470f3;
+  --chart-2: #3ccb7f;
+  --chart-3: #53b1fd;
+  --chart-4: #f0a63a;
+  --chart-5: #a78bfa;
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.45);
+  --shadow-md: 0 6px 16px -4px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 20px 48px -12px rgba(0, 0, 0, 0.6);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-faint: var(--faint-foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input: var(--input-bg);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-error: var(--error);
+  --color-error-soft: var(--error-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-violet: var(--violet);
+  --color-violet-soft: var(--violet-soft);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-arabic: var(--font-plex-arabic), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+html {
+  color-scheme: light;
+}
+html.dark {
+  color-scheme: dark;
+}
+html[lang="ar"] body {
+  font-family: var(--font-arabic);
+  letter-spacing: 0 !important;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--primary-soft);
+}
+
+/* thin, unobtrusive scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* focus ring, consistent everywhere */
+:where(a, button, [role="button"], input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid transparent;
+  box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--primary-ring);
+}
+
+/* leaflet overrides so maps match the theme */
+.leaflet-container {
+  font-family: inherit;
+  background: var(--muted);
+  border-radius: var(--radius-lg);
+}
+.leaflet-control-attribution {
+  background: transparent !important;
+  color: var(--faint-foreground) !important;
+  font-size: 10px !important;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes zoom-in {
+  from { opacity: 0; transform: scale(0.97) translateY(4px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in { animation: fade-in 0.18s ease-out; }
+.animate-zoom-in { animation: zoom-in 0.16s cubic-bezier(0.16, 1, 0.3, 1); }
+.animate-slide-up { animation: slide-up 0.22s cubic-bezier(0.16, 1, 0.3, 1); }

@@ -1,0 +1,624 @@
+// Masar — Moroccan delivery operating system
+// PostgreSQL schema for Supabase/production:
+// money is Int centimes, enums are String + app-level validation.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── Identity & access ────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         String // ADMIN | MERCHANT | MERCHANT_STAFF | COURIER
+  phone        String?
+  locale       String   @default("fr") // fr | ar | en
+  isActive     Boolean  @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  staffProfile  MerchantStaff?
+  courierProfile Courier?
+  notifications Notification[]
+  auditLogs     AuditLog[]
+}
+
+model Merchant {
+  id              String   @id @default(cuid())
+  name            String
+  slug            String   @unique
+  legalName       String?
+  email           String
+  phone           String
+  city            String?
+  address         String?
+  brandColor      String   @default("#2F45E0")
+  status          String   @default("ACTIVE") // ACTIVE | PENDING | SUSPENDED
+  plan            String   @default("growth") // starter | growth | scale
+  settlementCycle String   @default("WEEKLY") // WEEKLY | BIWEEKLY | MONTHLY
+  pricingConfig   String? // JSON pricing overrides
+  walletBalance   Int      @default(0) // centimes available
+  storeBio        String? // public storefront description
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  staff           MerchantStaff[]
+  products        Product[]
+  orders          Order[]
+  customers       Customer[]
+  codTransactions CodTransaction[]
+  settlements     Settlement[]
+  apiKeys         ApiKey[]
+  webhooks        Webhook[]
+  integrations    Integration[]
+  notifications   Notification[]
+}
+
+model MerchantStaff {
+  id         String   @id @default(cuid())
+  userId     String   @unique
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  merchantId String
+  merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  staffRole  String   @default("OPERATOR") // OWNER | OPERATOR | FINANCE
+  permissions String   @default("[]") // JSON array of allowed modules; [] = all
+  createdAt  DateTime @default(now())
+
+  @@index([merchantId])
+}
+
+model Courier {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employeeCode    String   @unique
+  vehicle         String   @default("MOTORCYCLE") // MOTORCYCLE | CAR | VAN
+  homeCity        String
+  zones           String   @default("[]") // JSON array of city names
+  status          String   @default("ACTIVE") // ACTIVE | INACTIVE | SUSPENDED
+  rating          Float    @default(4.8)
+  feePerDelivery  Int      @default(1400) // centimes earned by courier per delivered parcel
+  lastLat         Float?
+  lastLng         Float?
+  lastSeenAt      DateTime?
+  createdAt       DateTime @default(now())
+
+  deliveries Delivery[]
+  deposits   CourierDeposit[]
+  bags       Bag[]
+  orders     Order[]
+  returns    Return[]
+}
+
+model CourierDeposit {
+  id             String    @id @default(cuid())
+  courierId      String
+  courier        Courier   @relation(fields: [courierId], references: [id], onDelete: Cascade)
+  amount         Int // declared cash, centimes
+  expectedAmount Int // computed at declaration time
+  difference     Int // declared - expected
+  status         String    @default("DECLARED") // DECLARED | VERIFIED | MISMATCH
+  proofPhoto     String?
+  note           String?
+  declaredAt     DateTime  @default(now())
+  verifiedAt     DateTime?
+  verifiedBy     String?
+
+  @@index([courierId, declaredAt])
+}
+
+// ─── Geography & pricing ──────────────────────────────────────────
+
+model Region {
+  id     String  @id @default(cuid())
+  code   String  @unique
+  nameFr String
+  nameAr String
+  nameEn String
+  cities City[]
+
+  @@index([code])
+}
+
+model City {
+  id       String  @id @default(cuid())
+  nameFr   String
+  nameAr   String
+  nameEn   String
+  regionId String
+  region   Region  @relation(fields: [regionId], references: [id])
+  isRemote Boolean @default(false)
+  lat      Float
+  lng      Float
+  zones    Zone[]
+
+  @@unique([nameFr])
+  @@index([regionId])
+}
+
+model Zone {
+  id          String  @id @default(cuid())
+  name        String
+  cityId      String
+  city        City    @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  deliveryFee Int // centimes
+  returnFee   Int
+  etaHours    Int     @default(48)
+  weightSurcharge Int @default(0) // centimes per extra kg above 1kg
+  codFeePct   Float   @default(0) // percentage of COD kept by platform
+  isActive    Boolean @default(true)
+
+  @@index([cityId])
+}
+
+// ─── Catalog & customers ──────────────────────────────────────────
+
+model Product {
+  id         String   @id @default(cuid())
+  merchantId String
+  merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  name       String
+  sku        String?
+  category   String?
+  price      Int // centimes
+  stock      Int      @default(0)
+  imageUrl   String?
+  variants   String? // JSON [{name, option, priceDelta}]
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  orderItems OrderItem[]
+
+  @@index([merchantId])
+  @@index([merchantId, name])
+}
+
+model Customer {
+  id             String   @id @default(cuid())
+  merchantId     String
+  merchant       Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  fullName       String
+  phone          String
+  secondaryPhone String?
+  city           String
+  address        String?
+  notes          String?
+  totalOrders    Int      @default(0)
+  totalSpent     Int      @default(0)
+  failedCount    Int      @default(0)
+  returnedCount  Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  orders    Order[]
+  addresses Address[]
+
+  @@unique([merchantId, phone])
+  @@index([merchantId, fullName])
+}
+
+model Address {
+  id          String   @id @default(cuid())
+  customerId  String
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  label       String   @default("Domicile")
+  line        String
+  city        String
+  postalCode  String?
+  isDefault   Boolean  @default(false)
+}
+
+// ─── Orders & delivery ────────────────────────────────────────────
+
+model Order {
+  id          String  @id @default(cuid())
+  reference   String  @unique // MSR-XXXXXX, doubles as tracking number
+  merchantId  String
+  merchant    Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  customerId  String
+  customer    Customer @relation(fields: [customerId], references: [id])
+
+  status         String @default("NEW") // NEW | CONFIRMED | READY_FOR_PICKUP | PICKED_UP | IN_TRANSIT | OUT_FOR_DELIVERY | DELIVERED | FAILED | RETURNED | CANCELLED
+  paymentMethod  String @default("COD") // COD | PREPAID
+  source         String @default("DASHBOARD") // DASHBOARD | API | SHOPIFY | WOOCOMMERCE | PRESTASHOP
+
+  itemsTotal  Int // sum of items, centimes
+  shippingFee Int
+  discount    Int @default(0)
+  total       Int // itemsTotal + shippingFee - discount
+  codAmount   Int // cash to collect = total when COD
+
+  deliveryCity   String
+  deliveryAddress String
+  postalCode     String?
+  notes          String?
+  internalNote   String?
+  exchangeFor    String? // reference of the old parcel picked up in exchange deliveries
+  promoCode      String? // applied promo code at order creation
+  slotDate       String? // preferred delivery date YYYY-MM-DD (customer-chosen slot)
+  slotWindow     String? // e.g. 14-16
+  pickupPointId  String?
+
+  courierId String?
+  courier   Courier? @relation(fields: [courierId], references: [id])
+
+  attemptCount Int     @default(0)
+  etaDate      DateTime?
+  confirmedAt  DateTime?
+  pickedUpAt   DateTime?
+  deliveredAt  DateTime?
+  failedAt     DateTime?
+  returnedAt   DateTime?
+  cancelledAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  items   OrderItem[]
+  events  OrderEvent[]
+  delivery Delivery?
+  returns Return[]
+  payments Payment[]
+  codTransactions CodTransaction[]
+  disputes Dispute[]
+  tickets  Ticket[]
+
+  @@index([merchantId, status])
+  @@index([merchantId, createdAt])
+  @@index([status, createdAt])
+  @@index([courierId, status])
+  @@index([deliveryCity])
+}
+
+model OrderItem {
+  id        String   @id @default(cuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id])
+  name      String
+  sku       String?
+  quantity  Int      @default(1)
+  unitPrice Int
+  total     Int
+
+  @@index([orderId])
+}
+
+model OrderEvent {
+  id        String   @id @default(cuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  type      String // CREATED | CONFIRMED | READY | ASSIGNED | PICKED_UP | IN_TRANSIT | OUT_FOR_DELIVERY | DELIVERED | FAILED | RETURNED | CANCELLED | NOTE | ATTEMPT
+  message   String?
+  actorType String   @default("SYSTEM") // SYSTEM | MERCHANT | COURIER | ADMIN | API
+  actorName String?
+  createdAt DateTime @default(now())
+
+  @@index([orderId, createdAt])
+}
+
+model Delivery {
+  id              String  @id @default(cuid())
+  orderId         String  @unique
+  order           Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  courierId       String?
+  courier         Courier? @relation(fields: [courierId], references: [id])
+  status          String  @default("ASSIGNED") // ASSIGNED | PICKED_UP | IN_TRANSIT | OUT_FOR_DELIVERY | DELIVERED | FAILED | RETURN_IN_TRANSIT | RETURNED
+  attempts        Int     @default(0)
+  otpCode         String?
+  codCollected    Int     @default(0)
+  codStatus       String  @default("PENDING") // PENDING | COLLECTED | SETTLED | WAIVED
+  failureReason   String?
+  nextActionAt    DateTime?
+  proofPhoto      String?
+  proofSignature  String?
+  gpsLat          Float?
+  gpsLng          Float?
+  exchangePickedUp Boolean @default(false)
+  bagId           String?
+  weightKg        Float? // captured at pickup, feeds weight surcharge
+  pickedUpAt      DateTime?
+  outForDeliveryAt DateTime?
+  deliveredAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  attemptsLog DeliveryAttempt[]
+  rating      DeliveryRating?
+
+  @@index([courierId, status])
+  @@index([status])
+}
+
+model DeliveryAttempt {
+  id         String   @id @default(cuid())
+  deliveryId String
+  delivery   Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  number     Int
+  result     String // DELIVERED | FAILED | NO_ANSWER | WRONG_ADDRESS | POSTPONED | REFUSED | OUT_OF_ZONE | UNREACHABLE
+  reason     String?
+  courierNote String?
+  proofType  String? // OTP | SIGNATURE | PHOTO
+  gpsLat     Float?
+  gpsLng     Float?
+  occurredAt DateTime @default(now())
+
+  @@index([deliveryId])
+}
+
+model Return {
+  id          String   @id @default(cuid())
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  merchantId  String
+  reason      String
+  status      String   @default("REQUESTED") // REQUESTED | ASSIGNED | IN_TRANSIT | RECEIVED | COMPLETED
+  courierId   String?
+  courier     Courier? @relation(fields: [courierId], references: [id])
+  refundAmount Int     @default(0)
+  note        String?
+  requestedAt DateTime @default(now())
+  completedAt DateTime?
+
+  @@index([merchantId, status])
+}
+
+// ─── Money ────────────────────────────────────────────────────────
+
+model Payment {
+  id          String   @id @default(cuid())
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  method      String   @default("COD")
+  amount      Int
+  status      String   @default("PENDING") // PENDING | COLLECTED | SETTLED | REFUNDED
+  collectedAt DateTime?
+
+  @@index([orderId])
+}
+
+model CodTransaction {
+  id          String    @id @default(cuid())
+  merchantId  String
+  merchant    Merchant  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  orderId     String?
+  order       Order?    @relation(fields: [orderId], references: [id])
+  type        String // COD_COLLECTION | DELIVERY_FEE | RETURN_FEE | ADJUSTMENT | SETTLEMENT
+  amount      Int // signed, centimes (+ credit / - debit)
+  status      String    @default("AVAILABLE") // PENDING | AVAILABLE | SETTLED
+  description String?
+  settlementId String?
+  occurredAt  DateTime  @default(now())
+  settledAt   DateTime?
+
+  @@index([merchantId, status])
+  @@index([merchantId, occurredAt])
+}
+
+model Settlement {
+  id          String    @id @default(cuid())
+  reference   String    @unique // STL-2026-0001
+  merchantId  String
+  merchant    Merchant  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  grossCOD    Int
+  fees        Int
+  netAmount   Int
+  status      String    @default("PENDING") // PENDING | PROCESSING | PAID
+  method      String    @default("BANK_TRANSFER") // BANK_TRANSFER | CASH | CHECK
+  paymentReference String?
+  paymentNote      String?
+  periodStart DateTime?
+  periodEnd   DateTime?
+  createdAt   DateTime  @default(now())
+  paidAt      DateTime?
+
+  @@index([merchantId, status])
+}
+
+// ─── Platform ─────────────────────────────────────────────────────
+
+model Notification {
+  id         String    @id @default(cuid())
+  userId     String?
+  user       User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  merchantId String?
+  merchant   Merchant? @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  type       String // ORDER_CREATED | ORDER_CONFIRMED | COURIER_ASSIGNED | OUT_FOR_DELIVERY | DELIVERED | FAILED | RETURNED | SETTLEMENT_AVAILABLE | SYSTEM
+  title      String
+  body       String?
+  data       String?
+  channel    String    @default("IN_APP") // IN_APP | EMAIL | SMS | WHATSAPP
+  readAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, readAt])
+  @@index([merchantId, readAt])
+}
+
+model Integration {
+  id         String    @id @default(cuid())
+  merchantId String
+  merchant   Merchant  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  platform   String // SHOPIFY | WOOCOMMERCE | PRESTASHOP
+  status     String    @default("PENDING") // CONNECTED | PENDING | DISCONNECTED
+  config     String?
+  lastSyncAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@unique([merchantId, platform])
+}
+
+model ApiKey {
+  id         String    @id @default(cuid())
+  merchantId String
+  merchant   Merchant  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  name       String
+  prefix     String // msk_live_xxxx
+  hashedKey  String    @unique
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+  revokedAt  DateTime?
+
+  @@index([merchantId])
+}
+
+model Webhook {
+  id         String   @id @default(cuid())
+  merchantId String
+  merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  url        String
+  secret     String
+  events     String   @default("[]") // JSON array of event names
+  isActive   Boolean  @default(true)
+  lastStatus Int?
+  lastFiredAt DateTime?
+  createdAt  DateTime @default(now())
+
+  deliveries WebhookDelivery[]
+
+  @@index([merchantId])
+}
+
+model WebhookDelivery {
+  id        String   @id @default(cuid())
+  webhookId String
+  webhook   Webhook  @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  event     String
+  payload   String?
+  statusCode Int?
+  ok        Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([webhookId, createdAt])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  actor     User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  actorName String
+  actorType String   @default("USER")
+  action    String // e.g. ORDER_CONFIRMED, MERCHANT_SUSPENDED, SETTLEMENT_PAID
+  entity    String
+  entityId  String?
+  meta      String?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+}
+
+model Bag {
+  id          String    @id @default(cuid())
+  reference   String    @unique // BAG-XXXX
+  city        String
+  courierId   String?
+  courier     Courier?  @relation(fields: [courierId], references: [id])
+  status      String    @default("OPEN") // OPEN | SEALED | RECEIVED
+  sealCode    String?
+  parcelRefs  String    @default("[]") // JSON array of order references
+  sealedAt    DateTime?
+  receivedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([status])
+}
+
+model DeliveryRating {
+  id          String   @id @default(cuid())
+  deliveryId  String   @unique
+  delivery    Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  orderId     String
+  stars       Int
+  comment     String?
+  createdAt   DateTime @default(now())
+
+  @@index([orderId])
+}
+
+model PickupPoint {
+  id        String  @id @default(cuid())
+  name      String
+  city      String
+  address   String
+  phone     String
+  lat       Float
+  lng       Float
+  isActive  Boolean @default(true)
+}
+
+model Dispute {
+  id           String    @id @default(cuid())
+  orderId      String
+  order        Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  merchantId   String
+  type         String // DAMAGED | LOST | WRONG_ITEM | OTHER
+  status       String    @default("OPEN") // OPEN | UNDER_REVIEW | RESOLVED | REJECTED
+  description  String
+  resolution   String?
+  compensation Int       @default(0) // centimes credited to merchant wallet
+  openedAt     DateTime  @default(now())
+  resolvedAt   DateTime?
+  resolvedBy   String?
+
+  @@index([merchantId, status])
+}
+
+model PromoCode {
+  id         String    @id @default(cuid())
+  merchantId String
+  code       String
+  type       String    @default("PERCENT") // PERCENT | FIXED
+  value      Int // percent (0-100) or centimes
+  maxUses    Int       @default(0) // 0 = unlimited
+  uses       Int       @default(0)
+  expiresAt  DateTime?
+  isActive   Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+
+  @@unique([merchantId, code])
+  @@index([merchantId])
+}
+
+model Ticket {
+  id         String   @id @default(cuid())
+  orderId    String
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  merchantId String
+  subject    String
+  status     String   @default("OPEN") // OPEN | ANSWERED | RESOLVED
+  openedBy   String // MERCHANT | ADMIN
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  messages TicketMessage[]
+
+  @@index([merchantId, status])
+}
+
+model TicketMessage {
+  id         String   @id @default(cuid())
+  ticketId   String
+  ticket     Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorType String // MERCHANT | ADMIN
+  authorName String
+  body       String
+  createdAt  DateTime @default(now())
+
+  @@index([ticketId, createdAt])
+}
+
+model Setting {
+  key   String @id
+  value String
+}
