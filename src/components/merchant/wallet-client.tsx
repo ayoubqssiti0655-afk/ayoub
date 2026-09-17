@@ -126,7 +126,6 @@ export function WalletClient({
   const router = useRouter();
   const toast = useToast();
 
-  // Bank details state
   const [bank, setBank] = React.useState<BankDetails | null>(initialBankDetails);
   const [bankDialog, setBankDialog] = React.useState(false);
   const [bankForm, setBankForm] = React.useState({
@@ -135,6 +134,15 @@ export function WalletClient({
     accountHolder: initialBankDetails?.accountHolder ?? merchantName,
   });
   const [savingBank, setSavingBank] = React.useState(false);
+  const [editBankInWithdraw, setEditBankInWithdraw] = React.useState(false);
+
+  const isBankComplete = Boolean(
+    bank &&
+    bank.rib &&
+    bank.rib.replace(/\D/g, "").length === 24 &&
+    bank.accountHolder &&
+    bank.bankName
+  );
 
   // Settlement request state
   const [dialog, setDialog] = React.useState(false);
@@ -264,6 +272,20 @@ export function WalletClient({
 
   // Handle requesting settlement
   async function handleRequestSettlement() {
+    const cleanRib = bankForm.rib.replace(/\D/g, "");
+    const needsBankSave = !isBankComplete || editBankInWithdraw;
+
+    if (needsBankSave) {
+      if (cleanRib.length !== 24) {
+        toast.push({ title: "رقم الـ RIB المغربي يجب أن يتكون من 24 رقماً بالضبط", variant: "error" });
+        return;
+      }
+      if (!bankForm.accountHolder.trim()) {
+        toast.push({ title: "يرجى كتابة اسم صاحب الحساب البنكي للتأكيد", variant: "error" });
+        return;
+      }
+    }
+
     let amountInCentimes: number | undefined = undefined;
     if (withdrawMode === "CUSTOM") {
       const parsedDh = Number(customAmountDh);
@@ -282,10 +304,25 @@ export function WalletClient({
     const res = await requestSettlementAction({
       amount: amountInCentimes,
       isInstant,
+      bankDetails: needsBankSave
+        ? {
+            bankName: bankForm.bankName,
+            rib: cleanRib,
+            accountHolder: bankForm.accountHolder.trim(),
+          }
+        : undefined,
     });
     setPending(false);
 
     if (res.ok) {
+      if (needsBankSave) {
+        setBank({
+          bankName: bankForm.bankName,
+          rib: cleanRib,
+          accountHolder: bankForm.accountHolder.trim(),
+        });
+        setEditBankInWithdraw(false);
+      }
       toast.push({ title: t("wallet.requested"), variant: "success" });
       setDialog(false);
       router.refresh();
@@ -855,17 +892,115 @@ export function WalletClient({
               </div>
             )}
 
-            {/* Bank destination hint */}
-            <div className="rounded-xl border border-border bg-muted/40 p-3 text-[12px]">
-              <span className="font-semibold text-foreground">{t("wallet.request.destination")}:</span>
-              {bank ? (
-                <p className="mt-0.5 text-muted-foreground">
-                  {bank.bankName} • RIB: {formatMoroccanRib(bank.rib)} ({bank.accountHolder})
-                </p>
+            {/* Mandatory Bank & Personal Details Step */}
+            <div className="rounded-xl border border-primary/25 bg-surface p-3.5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Landmark className="size-4 text-primary" />
+                  <span className="text-[13px] font-bold text-foreground">
+                    الحساب البنكي والمعلومات الشخصية (إلزامي للسحب)
+                  </span>
+                </div>
+                {isBankComplete && !editBankInWithdraw && (
+                  <button
+                    type="button"
+                    onClick={() => setEditBankInWithdraw(true)}
+                    className="text-[11.5px] font-semibold text-primary hover:underline"
+                  >
+                    تعديل بيانات الـ RIB
+                  </button>
+                )}
+              </div>
+
+              {(!isBankComplete || editBankInWithdraw) ? (
+                <div className="space-y-3 pt-1">
+                  <p className="text-[11.5px] text-amber-600 dark:text-amber-400 font-medium">
+                    ⚠️ يرجى تأكيد رقم الـ RIB المغربي (24 رقماً) واسم صاحب الحساب حتى يتمكن المدير من صرف مستحقاتك بنجاح.
+                  </p>
+
+                  <div>
+                    <label className="mb-1 block text-[12px] font-medium text-muted-foreground">
+                      {t("wallet.bank.bankName")}
+                    </label>
+                    <Select
+                      value={bankForm.bankName}
+                      onChange={(e) => setBankForm((b) => ({ ...b, bankName: e.target.value }))}
+                      className="h-9 text-[12.5px]"
+                      required
+                    >
+                      {MOROCCAN_BANKS.map((bnk) => (
+                        <option key={bnk} value={bnk}>
+                          {bnk}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+
+                  <div>
+                    <div className="mb-1 flex items-center justify-between text-[12px]">
+                      <label className="font-medium text-muted-foreground">
+                        رقم الـ RIB المغربي (24 رقماً)
+                      </label>
+                      <span className={`font-mono text-[11px] font-bold ${
+                        bankForm.rib.replace(/\D/g, "").length === 24 ? "text-success" : "text-amber-600"
+                      }`}>
+                        {bankForm.rib.replace(/\D/g, "").length} / 24 رقماً
+                      </span>
+                    </div>
+                    <Input
+                      value={bankForm.rib}
+                      onChange={(e) => {
+                        const cleaned = e.target.value.replace(/\D/g, "").slice(0, 24);
+                        setBankForm((b) => ({ ...b, rib: cleaned }));
+                      }}
+                      placeholder="Ex: 230780000123456789012345"
+                      maxLength={24}
+                      className="font-mono text-[13px] tracking-wider h-9"
+                      required
+                    />
+                    {bankForm.rib.length > 0 && bankForm.rib.length < 24 && (
+                      <p className="mt-1 text-[11px] text-amber-600">
+                        متبقي {24 - bankForm.rib.length} أرقام لاكتمال الـ RIB
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-[12px] font-medium text-muted-foreground">
+                      الاسم الكامل لصاحب الحساب (يطابق بطاقة الهوية الوطنية)
+                    </label>
+                    <Input
+                      value={bankForm.accountHolder}
+                      onChange={(e) => setBankForm((b) => ({ ...b, accountHolder: e.target.value }))}
+                      placeholder="Nom complet du titulaire"
+                      className="h-9 text-[12.5px]"
+                      required
+                    />
+                  </div>
+
+                  {editBankInWithdraw && isBankComplete && (
+                    <button
+                      type="button"
+                      onClick={() => setEditBankInWithdraw(false)}
+                      className="text-[11.5px] text-muted-foreground hover:underline"
+                    >
+                      إلغاء التعديل والاحتفاظ بالـ RIB السابق
+                    </button>
+                  )}
+                </div>
               ) : (
-                <p className="mt-0.5 text-amber-600 dark:text-amber-400">
-                  {t("wallet.bank.notConfigured")}
-                </p>
+                <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-2.5 text-[12px]">
+                  <div className="flex items-center gap-1.5 font-bold text-emerald-700 dark:text-emerald-300">
+                    <CheckCircle2 className="size-4" />
+                    <span>تم تأكيد وتوثيق الحساب البنكي</span>
+                  </div>
+                  <p className="mt-1 font-semibold text-foreground">
+                    {bank?.bankName} • <span className="font-mono text-[12.5px] tracking-wider">{formatMoroccanRib(bank?.rib ?? "")}</span>
+                  </p>
+                  <p className="text-[11.5px] text-muted-foreground mt-0.5">
+                    صاحب الحساب: <strong className="text-foreground">{bank?.accountHolder}</strong>
+                  </p>
+                </div>
               )}
             </div>
           </div>
@@ -874,7 +1009,15 @@ export function WalletClient({
             <Button variant="ghost" onClick={() => setDialog(false)}>
               {t("common.cancel")}
             </Button>
-            <Button disabled={pending || !canWithdraw} onClick={handleRequestSettlement}>
+            <Button
+              disabled={
+                pending ||
+                !canWithdraw ||
+                ((!isBankComplete || editBankInWithdraw) &&
+                  (bankForm.rib.replace(/\D/g, "").length !== 24 || !bankForm.accountHolder.trim()))
+              }
+              onClick={handleRequestSettlement}
+            >
               {t("common.confirm")}
             </Button>
           </DialogFooter>

@@ -284,12 +284,46 @@ export async function createCustomerAction(input: {
   } catch (e) { return fail(e); }
 }
 
-// ── Wallet ────────────────────────────────────────────────────────
-export async function requestSettlementAction(input?: { amount?: number; isInstant?: boolean }): Promise<ActionResult> {
+export async function requestSettlementAction(input?: {
+  amount?: number;
+  isInstant?: boolean;
+  bankDetails?: { bankName: string; rib: string; accountHolder: string };
+}): Promise<ActionResult> {
   try {
     const { merchant, user } = await requireMerchant();
+
+    // 1. If bank details provided during withdrawal, validate and save them first
+    if (input?.bankDetails) {
+      const cleanRib = input.bankDetails.rib.replace(/\D/g, "");
+      if (cleanRib.length !== 24) {
+        return { ok: false, message: "رقم الـ RIB المغربي يجب أن يتكون من 24 رقماً بالضبط" };
+      }
+      if (!input.bankDetails.bankName.trim() || !input.bankDetails.accountHolder.trim()) {
+        return { ok: false, message: "اسم البنك واسم صاحب الحساب مطلوبان للتأكيد" };
+      }
+      await db.setting.upsert({
+        where: { key: `merchant_bank_${merchant.id}` },
+        create: {
+          key: `merchant_bank_${merchant.id}`,
+          value: JSON.stringify({
+            bankName: input.bankDetails.bankName.trim(),
+            rib: cleanRib,
+            accountHolder: input.bankDetails.accountHolder.trim(),
+          }),
+        },
+        update: {
+          value: JSON.stringify({
+            bankName: input.bankDetails.bankName.trim(),
+            rib: cleanRib,
+            accountHolder: input.bankDetails.accountHolder.trim(),
+          }),
+        },
+      });
+    }
+
     const stl = await requestSettlement(merchant.id, { id: user.id, name: user.name, type: "MERCHANT" }, input);
     revalidatePath("/app/wallet");
+    revalidatePath("/admin/settlements");
     return { ok: true, data: { reference: stl.reference } };
   } catch (e) { return fail(e); }
 }

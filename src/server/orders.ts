@@ -502,6 +502,22 @@ export async function requestSettlement(merchantId: string, actor: Actor, option
   if (!merchant) throw notFound("Merchant not found");
   if (merchant.walletBalance < 20000) throw new ApiError(400, "MIN_BALANCE", "Available balance must be at least 200 DH");
 
+  // Strict check: Merchant MUST have confirmed 24-digit Moroccan RIB before requesting payout
+  const bankSetting = await db.setting.findUnique({ where: { key: `merchant_bank_${merchantId}` } });
+  if (!bankSetting) {
+    throw new ApiError(400, "RIB_REQUIRED", "يجب تسجيل وتأكيد الحساب البنكي (رقم الـ RIB المكون من 24 رقماً) والمعلومات الشخصية قبل تقديم طلب السحب.");
+  }
+  let bankData: { bankName?: string; rib?: string; accountHolder?: string } = {};
+  try {
+    bankData = JSON.parse(bankSetting.value);
+  } catch {
+    throw new ApiError(400, "INVALID_RIB", "بيانات الحساب البنكي غير صالحة.");
+  }
+  const cleanRib = (bankData.rib ?? "").replace(/\D/g, "");
+  if (cleanRib.length !== 24 || !bankData.bankName || !bankData.accountHolder) {
+    throw new ApiError(400, "INVALID_RIB", "يجب تأكيد رقم الـ RIB المغربي المكون من 24 رقماً واسم صاحب الحساب لإتمام السحب.");
+  }
+
   const requestedAmount = options?.amount;
   if (requestedAmount !== undefined) {
     if (requestedAmount < 20000) throw new ApiError(400, "MIN_BALANCE", "Minimum withdrawal amount is 200 DH");

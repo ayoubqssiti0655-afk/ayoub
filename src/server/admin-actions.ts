@@ -665,3 +665,53 @@ export async function getBulkSettlementExportDataAction(): Promise<AdminResult> 
     return { ok: true, data: rows };
   } catch (e) { return fail(e); }
 }
+
+/** Admin action to save or update a merchant's bank RIB details */
+export async function adminSaveMerchantBankAction(
+  merchantId: string,
+  input: { bankName: string; rib: string; accountHolder: string }
+): Promise<AdminResult> {
+  try {
+    const admin = await requireAdmin();
+    const cleanRib = input.rib.replace(/\D/g, "");
+    if (cleanRib.length !== 24) {
+      return { ok: false, message: "رقم الـ RIB يجب أن يتكون من 24 رقماً بالضبط" };
+    }
+    if (!input.bankName.trim() || !input.accountHolder.trim()) {
+      return { ok: false, message: "اسم البنك واسم صاحب الحساب مطلوبان" };
+    }
+    await db.setting.upsert({
+      where: { key: `merchant_bank_${merchantId}` },
+      create: {
+        key: `merchant_bank_${merchantId}`,
+        value: JSON.stringify({
+          bankName: input.bankName.trim(),
+          rib: cleanRib,
+          accountHolder: input.accountHolder.trim(),
+        }),
+      },
+      update: {
+        value: JSON.stringify({
+          bankName: input.bankName.trim(),
+          rib: cleanRib,
+          accountHolder: input.accountHolder.trim(),
+        }),
+      },
+    });
+    await audit({
+      actorId: admin.id,
+      actorName: admin.name,
+      actorType: "ADMIN",
+      action: "MERCHANT_BANK_SAVED_BY_ADMIN",
+      entity: "Merchant",
+      entityId: merchantId,
+      meta: `${input.bankName} — ${cleanRib}`,
+    });
+    revalidatePath("/admin/settlements");
+    revalidatePath("/app/wallet");
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+

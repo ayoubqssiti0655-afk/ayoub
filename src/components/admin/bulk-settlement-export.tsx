@@ -1,12 +1,31 @@
 "use client";
 
 import * as React from "react";
-import { FileSpreadsheet, Download, CheckCircle2, AlertTriangle, Building, ArrowDownToLine, Landmark } from "lucide-react";
+import { useRouter } from "next/navigation";
+import {
+  FileSpreadsheet, Download, CheckCircle2, AlertTriangle, Building, ArrowDownToLine,
+  Landmark, Edit2, PlusCircle,
+} from "lucide-react";
 import { useI18n } from "@/i18n/provider";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { getBulkSettlementExportDataAction } from "@/server/admin-actions";
+import { Input, Select } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { adminSaveMerchantBankAction } from "@/server/admin-actions";
 import { useToast } from "@/components/ui/toast";
+
+const MOROCCAN_BANKS = [
+  "Attijariwafa bank",
+  "Banque Populaire (BCP)",
+  "CIH Bank",
+  "Bank of Africa (BMCE)",
+  "Al Barid Bank",
+  "Société Générale Maroc (SGMB)",
+  "BMCI",
+  "Crédit du Maroc (CDM)",
+  "CFG Bank",
+  "Autre banque",
+];
 
 export type MerchantPayoutRow = {
   merchantId: string;
@@ -29,14 +48,74 @@ export function BulkSettlementExport({
   enabled?: boolean;
 }) {
   const { t, money } = useI18n();
+  const router = useRouter();
   const toast = useToast();
   const [rows, setRows] = React.useState<MerchantPayoutRow[]>(initialRows);
-  const [busy, setBusy] = React.useState(false);
+
+  // Edit RIB modal state
+  const [editingMerchant, setEditingMerchant] = React.useState<MerchantPayoutRow | null>(null);
+  const [bankName, setBankName] = React.useState("Attijariwafa bank");
+  const [rib, setRib] = React.useState("");
+  const [accountHolder, setAccountHolder] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    setRows(initialRows);
+  }, [initialRows]);
 
   if (!enabled) return null;
 
   const totalPayable = rows.reduce((a, b) => a + b.amountCentimes, 0);
   const readyWithRib = rows.filter((r) => r.hasRib && r.rib.replace(/\D/g, "").length === 24);
+
+  function openEditRib(row: MerchantPayoutRow) {
+    setEditingMerchant(row);
+    setBankName(row.bankName !== "Non renseigné" ? row.bankName : "Attijariwafa bank");
+    setRib(row.rib ?? "");
+    setAccountHolder(row.accountHolder || row.merchantName);
+  }
+
+  async function handleSaveRib() {
+    if (!editingMerchant) return;
+    const cleanRib = rib.replace(/\D/g, "");
+    if (cleanRib.length !== 24) {
+      toast.push({ title: "رقم الـ RIB المغربي يجب أن يتكون من 24 رقماً بالضبط", variant: "error" });
+      return;
+    }
+    if (!accountHolder.trim()) {
+      toast.push({ title: "يرجى كتابة اسم صاحب الحساب البنكي", variant: "error" });
+      return;
+    }
+
+    setSaving(true);
+    const res = await adminSaveMerchantBankAction(editingMerchant.merchantId, {
+      bankName,
+      rib: cleanRib,
+      accountHolder: accountHolder.trim(),
+    });
+    setSaving(false);
+
+    if (res.ok) {
+      toast.push({ title: "تم حفظ وتأكيد الحساب البنكي للتاجر بنجاح", variant: "success" });
+      setRows((prev) =>
+        prev.map((r) =>
+          r.merchantId === editingMerchant.merchantId
+            ? {
+                ...r,
+                hasRib: true,
+                bankName,
+                rib: cleanRib,
+                accountHolder: accountHolder.trim(),
+              }
+            : r
+        )
+      );
+      setEditingMerchant(null);
+      router.refresh();
+    } else {
+      toast.push({ title: res.message ?? "تعذر حفظ الحساب البنكي", variant: "error" });
+    }
+  }
 
   function exportBankFile(bankType: "STANDARD" | "CIH" | "ATTIJARI") {
     if (readyWithRib.length === 0) {
@@ -113,13 +192,13 @@ export function BulkSettlementExport({
 
         {rows.length - readyWithRib.length > 0 && (
           <span className="inline-flex items-center gap-1 text-[11px] text-warning font-semibold">
-            <AlertTriangle className="size-3.5" /> {rows.length - readyWithRib.length} تجار لم يسجلوا RIB بعد
+            <AlertTriangle className="size-3.5" /> {rows.length - readyWithRib.length} تجار لم يسجلوا الـ RIB بعد (اضغط لإدخاله)
           </span>
         )}
       </div>
 
       <div className="mt-3 overflow-hidden rounded-xl border border-border bg-surface">
-        <div className="max-h-60 overflow-y-auto">
+        <div className="max-h-64 overflow-y-auto">
           <table className="w-full text-start text-[12px]">
             <thead className="sticky top-0 bg-surface-2 text-muted-foreground border-b border-border text-[11.5px]">
               <tr>
@@ -127,12 +206,13 @@ export function BulkSettlementExport({
                 <th className="py-2.5 px-3 text-start font-semibold">البنك</th>
                 <th className="py-2.5 px-3 text-start font-semibold">رقم الـ RIB (24 رقم)</th>
                 <th className="py-2.5 px-3 text-end font-semibold">المبلغ المستحق</th>
+                <th className="py-2.5 px-3 text-center font-semibold">إجراء</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="py-6 text-center text-muted-foreground text-[12.5px]">
+                  <td colSpan={5} className="py-6 text-center text-muted-foreground text-[12.5px]">
                     لا توجد مستحقات سحب تفوق 200 درهم في الوقت الحالي
                   </td>
                 </tr>
@@ -150,11 +230,30 @@ export function BulkSettlementExport({
                           {r.rib.slice(0, 7)}...{r.rib.slice(-4)}
                         </span>
                       ) : (
-                        <Badge tone="warning" className="text-[11px] px-1.5 py-0">بانتظار الـ RIB</Badge>
+                        <button
+                          type="button"
+                          onClick={() => openEditRib(r)}
+                          className="inline-flex items-center gap-1 text-amber-600 hover:underline font-semibold text-[11px]"
+                        >
+                          <Badge tone="warning" className="text-[11px] px-1.5 py-0 cursor-pointer">
+                            بانتظار الـ RIB ⚠️
+                          </Badge>
+                        </button>
                       )}
                     </td>
                     <td className="py-2.5 px-3 text-end font-bold text-primary tnum">
                       {money(r.amountCentimes)}
+                    </td>
+                    <td className="py-2.5 px-3 text-center">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-[11px] px-2 gap-1 text-primary hover:bg-primary/10"
+                        onClick={() => openEditRib(r)}
+                      >
+                        <Edit2 className="size-3" />
+                        <span>{r.hasRib ? "تعديل" : "إدخال RIB"}</span>
+                      </Button>
                     </td>
                   </tr>
                 ))
@@ -163,6 +262,82 @@ export function BulkSettlementExport({
           </table>
         </div>
       </div>
+
+      {/* Dialog for Admin to enter/edit merchant's RIB */}
+      <Dialog open={Boolean(editingMerchant)} onOpenChange={(open) => !open && setEditingMerchant(null)}>
+        <DialogContent size="sm">
+          <DialogTitle>
+            تأكيد الحساب البنكي للتاجر: {editingMerchant?.merchantName}
+          </DialogTitle>
+          <DialogDescription>
+            أدخل رقم الـ RIB المكون من 24 رقماً للتاجر لتوليد ملف التحويل البنكي وتسهيل الصرف.
+          </DialogDescription>
+
+          <div className="mt-4 space-y-3">
+            <div>
+              <label className="mb-1 block text-[12px] font-medium text-muted-foreground">البنك المعتمد</label>
+              <Select
+                value={bankName}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setBankName(e.target.value)}
+                className="h-9 text-[12.5px]"
+              >
+                {MOROCCAN_BANKS.map((b) => (
+                  <option key={b} value={b}>
+                    {b}
+                  </option>
+                ))}
+              </Select>
+            </div>
+
+            <div>
+              <div className="mb-1 flex items-center justify-between text-[12px]">
+                <label className="font-medium text-muted-foreground">رقم الـ RIB المغربي (24 رقماً)</label>
+                <span
+                  className={`font-mono text-[11px] font-bold ${
+                    rib.replace(/\D/g, "").length === 24 ? "text-success" : "text-amber-600"
+                  }`}
+                >
+                  {rib.replace(/\D/g, "").length} / 24 رقماً
+                </span>
+              </div>
+              <Input
+                value={rib}
+                onChange={(e) => {
+                  const clean = e.target.value.replace(/\D/g, "").slice(0, 24);
+                  setRib(clean);
+                }}
+                placeholder="Ex: 230780000123456789012345"
+                maxLength={24}
+                className="font-mono text-[13px] tracking-wider h-9"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-[12px] font-medium text-muted-foreground">
+                اسم صاحب الحساب (Titulaire du compte)
+              </label>
+              <Input
+                value={accountHolder}
+                onChange={(e) => setAccountHolder(e.target.value)}
+                placeholder="Nom complet ou raison sociale"
+                className="h-9 text-[12.5px]"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setEditingMerchant(null)}>
+              {t("common.cancel")}
+            </Button>
+            <Button
+              disabled={saving || rib.replace(/\D/g, "").length !== 24 || !accountHolder.trim()}
+              onClick={handleSaveRib}
+            >
+              {t("common.save")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
