@@ -25,7 +25,7 @@ const createSchema = z.object({
   shippingFee: z.number().int().min(0).optional(),
   discount: z.number().int().min(0).default(0),
   paymentMethod: z.enum(["COD", "PREPAID"]).default("COD"),
-  source: z.enum(["API", "SHOPIFY", "WOOCOMMERCE", "PRESTASHOP"]).default("API"),
+  source: z.enum(["API", "SHOPIFY", "WOOCOMMERCE", "PRESTASHOP", "YOUCAN", "EXCEL_IMPORT"]).default("API"),
 });
 
 export const GET = api(

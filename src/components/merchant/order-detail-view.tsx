@@ -260,12 +260,28 @@ export async function OrderDetailView({ id, mode }: { id: string; mode: "merchan
               {order.notes && (
                 <p className="mt-2 rounded-lg bg-warning-soft px-2.5 py-1.5 text-[12px] leading-5 text-warning">{order.notes}</p>
               )}
-              <div className="mt-3 flex gap-2">
+              <div className="mt-3 flex flex-wrap gap-2">
                 <a href={`tel:${order.customer.phone}`} className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg border border-border bg-surface text-[12.5px] font-medium shadow-xs transition-colors hover:bg-muted">
                   <Phone className="size-3.5" /> {i.t("common.call")}
                 </a>
-                <a href={waLink(order.customer.phone)} target="_blank" rel="noreferrer" className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg border border-border bg-surface text-[12.5px] font-medium shadow-xs transition-colors hover:bg-muted">
+                <a
+                  href={waLink(
+                    order.customer.phone,
+                    i.t("whatsapp.merchantMessage", {
+                      name: order.customer.fullName,
+                      merchant: order.merchant.name,
+                      ref: order.reference,
+                      cod: i.money(order.codAmount),
+                    })
+                  )}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#25D366]/30 bg-[#25D366]/10 text-[12.5px] font-semibold text-[#25D366] shadow-xs transition-colors hover:bg-[#25D366]/20"
+                >
                   <MessageCircle className="size-3.5" /> WhatsApp
+                </a>
+                <a href={mapsLink(order.delivery?.gpsLat, order.delivery?.gpsLng, `${order.deliveryAddress}, ${order.deliveryCity}`)} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-[12.5px] font-medium shadow-xs transition-colors hover:bg-muted">
+                  <MapPin className="size-3.5" /> {i.t("common.navigate")}
                 </a>
               </div>
             </CardContent>

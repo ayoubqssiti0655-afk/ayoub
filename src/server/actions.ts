@@ -590,3 +590,78 @@ export async function updateStaffPermissionsAction(userId: string, permissions: 
     return { ok: true };
   } catch (e) { return fail(e); }
 }
+
+export type BulkImportRowInput = {
+  fullName: string;
+  phone: string;
+  city: string;
+  address: string;
+  productName?: string;
+  codAmount: number;
+  notes?: string;
+};
+
+export async function bulkImportOrdersAction(rows: BulkImportRowInput[]): Promise<ActionResult<{ count: number; failed: number }>> {
+  try {
+    const { merchant } = await requireMerchant();
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return { ok: false, message: "No rows to import" };
+    }
+
+    let created = 0;
+    let failed = 0;
+
+    for (const r of rows) {
+      try {
+        let phone = (r.phone ?? "").toString().replace(/[\s\-]/g, "");
+        if (phone.startsWith("0")) phone = "+212" + phone.slice(1);
+        else if (!phone.startsWith("+212")) phone = "+212" + phone;
+
+        const codInCentimes = Math.round(Number(r.codAmount || 0) * 100);
+
+        await createOrder({
+          merchantId: merchant.id,
+          customer: {
+            fullName: r.fullName || "Client",
+            phone,
+            city: r.city,
+            address: r.address || r.city,
+            notes: r.notes,
+          },
+          items: [
+            {
+              name: r.productName || "Colis",
+              quantity: 1,
+              unitPrice: codInCentimes > 0 ? codInCentimes : 0,
+            },
+          ],
+          shippingFee: 0,
+          paymentMethod: codInCentimes > 0 ? "COD" : "PREPAID",
+          notes: r.notes,
+          source: "EXCEL_IMPORT",
+        });
+        created++;
+      } catch (err) {
+        console.error("[bulkImport error for row]", r, err);
+        failed++;
+      }
+    }
+
+    revalidatePath("/app/orders");
+    return { ok: true, data: { count: created, failed } };
+  } catch (e) { return fail(e); }
+}
+
+export async function markReturnReceivedAction(returnId: string): Promise<ActionResult> {
+  try {
+    const { merchant } = await requireMerchant();
+    const ret = await db.return.findFirst({ where: { id: returnId, merchantId: merchant.id } });
+    if (!ret) return { ok: false, message: "Return record not found" };
+    await db.return.update({
+      where: { id: returnId },
+      data: { status: "RECEIVED", completedAt: new Date() },
+    });
+    revalidatePath("/app/returns");
+    return { ok: true };
+  } catch (e) { return fail(e); }
+}

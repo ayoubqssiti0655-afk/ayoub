@@ -6,6 +6,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { RotateCcw } from "lucide-react";
 import Link from "next/link";
+import { ReturnActionButton } from "@/components/merchant/return-action-button";
 
 export const metadata = { title: "Returns" };
 
@@ -40,6 +41,7 @@ export default async function ReturnsPage() {
                 <TH className="hidden md:table-cell">{i.t("common.courier")}</TH>
                 <TH className="hidden sm:table-cell">{i.t("returns.table.date")}</TH>
                 <TH>{i.t("common.status")}</TH>
+                <TH className="text-end">{i.t("common.actions")}</TH>
               </TR>
             </THead>
             <TBody>
@@ -55,6 +57,9 @@ export default async function ReturnsPage() {
                   <TD className="hidden text-muted-foreground md:table-cell">{r.courier?.user.name ?? i.t("common.unassigned")}</TD>
                   <TD className="hidden text-muted-foreground tnum sm:table-cell">{i.date(r.requestedAt)}</TD>
                   <TD><StatusBadge status={r.status} /></TD>
+                  <TD className="text-end">
+                    <ReturnActionButton returnId={r.id} status={r.status} />
+                  </TD>
                 </TR>
               ))}
             </TBody>

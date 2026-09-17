@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/server/db";
-import { getCurrentUser, hashPassword } from "@/lib/auth";
+import { getCurrentUser, hashPassword, verifyPassword } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
 import { audit } from "@/server/audit";
 import { markSettlementPaid, requestSettlement } from "@/server/orders";
@@ -379,6 +379,65 @@ export async function resolveTicketAdminAction(ticketId: string): Promise<AdminR
     const { resolveTicket } = await import("@/server/tickets");
     await resolveTicket(ticketId, admin.name);
     revalidatePath("/admin/tickets");
+    return { ok: true };
+  } catch (e) { return fail(e); }
+}
+
+export async function changeAdminPasswordAction(input: { current: string; next: string }): Promise<AdminResult> {
+  try {
+    const admin = await requireAdmin();
+    if (!input.current || !input.next) return { ok: false, message: "Missing required fields" };
+    if (input.next.length < 8) return { ok: false, message: "Password must be at least 8 characters" };
+    const user = await db.user.findUnique({ where: { id: admin.id } });
+    if (!user) return { ok: false, message: "Admin user not found" };
+    const valid = await verifyPassword(input.current, user.passwordHash);
+    if (!valid) return { ok: false, message: "Current password is incorrect" };
+
+    await db.user.update({
+      where: { id: admin.id },
+      data: { passwordHash: await hashPassword(input.next) },
+    });
+    await audit({
+      actorType: "ADMIN",
+      actorName: admin.name,
+      actorId: admin.id,
+      action: "USER_PASSWORD_CHANGED",
+      entity: "USER",
+      entityId: admin.id,
+    });
+    return { ok: true };
+  } catch (e) { return fail(e); }
+}
+
+export async function updatePlatformSettingsAction(input: { adminName: string; adminEmail: string; platformName?: string; supportPhone?: string }): Promise<AdminResult> {
+  try {
+    const admin = await requireAdmin();
+    if (!input.adminName || !input.adminEmail) return { ok: false, message: "Name and email are required" };
+
+    // Update admin user profile
+    await db.user.update({
+      where: { id: admin.id },
+      data: { name: input.adminName, email: input.adminEmail },
+    });
+
+    // Update platform settings
+    if (input.platformName) {
+      await db.setting.upsert({
+        where: { key: "platform_name" },
+        update: { value: input.platformName },
+        create: { key: "platform_name", value: input.platformName },
+      });
+    }
+    if (input.supportPhone) {
+      await db.setting.upsert({
+        where: { key: "platform_support_phone" },
+        update: { value: input.supportPhone },
+        create: { key: "platform_support_phone", value: input.supportPhone },
+      });
+    }
+
+    revalidatePath("/admin/settings");
+    revalidatePath("/admin");
     return { ok: true };
   } catch (e) { return fail(e); }
 }

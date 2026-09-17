@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Wand2, ArrowUpDown, CheckCheck, ChevronDown, Columns3, Download, EyeOff, Filter, PackageCheck,
-  Search, ShoppingCart, Truck, X, Ban,
+  Search, ShoppingCart, Truck, X, Ban, FileSpreadsheet, Printer, MessageCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n/provider";
@@ -18,7 +18,8 @@ import { StatusBadge } from "@/components/status-badge";
 import { EmptyState, Pagination } from "@/components/shared";
 import { useToast } from "@/components/ui/toast";
 import { confirmOrdersAction, markReadyAction, exportOrdersAction } from "@/server/actions";
-import { avatarHue } from "@/lib/format";
+import { avatarHue, waLink } from "@/lib/format";
+import { ImportOrdersModal } from "./import-orders-modal";
 
 export type OrderRow = {
   id: string;
@@ -65,6 +66,7 @@ export function OrdersTable({
   const [hiddenCols, setHiddenCols] = React.useState<string[]>([]);
   const [search, setSearch] = React.useState(sp.get("q") ?? "");
   const [pending, setPending] = React.useState(false);
+  const [importOpen, setImportOpen] = React.useState(false);
 
   React.useEffect(() => {
     try {
@@ -254,6 +256,16 @@ export function OrdersTable({
           <Download className="size-3.5" />
           <span className="hidden sm:inline">{t("common.exportCsv")}</span>
         </Button>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setImportOpen(true)}
+          className="border-primary/30 text-primary hover:bg-primary-soft"
+        >
+          <FileSpreadsheet className="size-3.5" />
+          <span>{t("orders.importExcel")}</span>
+        </Button>
       </div>
 
       {/* bulk bar */}
@@ -266,6 +278,17 @@ export function OrdersTable({
           </Button>
           <Button size="sm" variant="outline" disabled={pending} onClick={() => bulk("ready")}>
             <PackageCheck className="size-3.5" /> {t("orders.bulkReady")}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={pending}
+            onClick={() => {
+              const ids = Array.from(selected).join(",");
+              window.open(`/app/orders/bulk-labels?ids=${ids}`, "_blank");
+            }}
+          >
+            <Printer className="size-3.5" /> {t("orders.printLabels")}
           </Button>
           {autoAssignEnabled && (
             <Button size="sm" variant="outline" disabled={pending} onClick={() => bulk("auto")} title={t("autoAssign.hint")}>
@@ -327,7 +350,30 @@ export function OrdersTable({
                     </div>
                   </TD>
                 )}
-                {visible("phone") && <TD className="hidden text-muted-foreground tnum md:table-cell">{fmtPhone(o.customer.phone)}</TD>}
+                {visible("phone") && (
+                  <TD className="hidden md:table-cell">
+                    <div className="flex items-center gap-1.5 text-muted-foreground tnum">
+                      <span>{fmtPhone(o.customer.phone)}</span>
+                      <a
+                        href={waLink(
+                          o.customer.phone,
+                          t("whatsapp.merchantMessage", {
+                            name: o.customer.fullName,
+                            merchant: "المتجر",
+                            ref: o.reference,
+                            cod: money(o.codAmount),
+                          })
+                        )}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex size-5.5 items-center justify-center rounded-md border border-border bg-surface text-[#25D366] transition-colors hover:border-[#25D366]/40 hover:bg-[#25D366]/10"
+                        title={t("whatsapp.quickAction")}
+                      >
+                        <MessageCircle className="size-3" />
+                      </a>
+                    </div>
+                  </TD>
+                )}
                 {visible("city") && <TD>{o.deliveryCity}</TD>}
                 {visible("amount") && <TD className="text-end font-semibold tnum">{money(o.total)}</TD>}
                 {visible("cod") && <TD className="hidden text-end text-muted-foreground tnum sm:table-cell">{o.codAmount > 0 ? money(o.codAmount) : "—"}</TD>}
@@ -368,6 +414,12 @@ export function OrdersTable({
           />
         </div>
       )}
+
+      <ImportOrdersModal
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        cities={cities}
+      />
     </div>
   );
 }

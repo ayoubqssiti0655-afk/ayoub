@@ -36,7 +36,10 @@ export function IntegrationsClient({
   const [whEvents, setWhEvents] = React.useState<string[]>(["order.created", "order.delivered", "order.failed"]);
   const [busy, setBusy] = React.useState(false);
 
+  const [youcanModal, setYoucanModal] = React.useState(false);
+
   const platforms = [
+    { id: "YOUCAN", name: "YouCan.shop", desc: "منصة التجارة الإلكترونية المغربية الأولى — مزامنة تلقائية فورية للطلبات" },
     { id: "SHOPIFY", name: "Shopify", desc: "Sync orders automatically when paid" },
     { id: "WOOCOMMERCE", name: "WooCommerce", desc: "WordPress plugin, REST ready" },
     { id: "PRESTASHOP", name: "PrestaShop", desc: "Module 1.7 / 8.x" },
@@ -141,13 +144,22 @@ export function IntegrationsClient({
                 </div>
                 <p className="mt-1 text-[12.5px] leading-5 text-muted-foreground">{p.desc}</p>
                 {st !== "CONNECTED" && (
-                  <Button size="sm" variant="outline" className="mt-3 w-full" onClick={async () => {
-                    await fetch("/api/v1/noop").catch(() => {});
-                    const { connectIntegrationAction } = await import("@/server/actions");
-                    await connectIntegrationAction(p.id);
-                    router.refresh();
-                  }}>
-                    <ExternalLink className="size-3.5" /> {t("integrations.connect")}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="mt-3 w-full"
+                    onClick={async () => {
+                      if (p.id === "YOUCAN") {
+                        setYoucanModal(true);
+                        return;
+                      }
+                      await fetch("/api/v1/noop").catch(() => {});
+                      const { connectIntegrationAction } = await import("@/server/actions");
+                      await connectIntegrationAction(p.id);
+                      router.refresh();
+                    }}
+                  >
+                    <ExternalLink className="size-3.5" /> {p.id === "YOUCAN" ? "إعداد الربط" : t("integrations.connect")}
                   </Button>
                 )}
               </div>
@@ -264,6 +276,45 @@ export function IntegrationsClient({
               }}
             >
               {t("common.create")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* YouCan Modal */}
+      <Dialog open={youcanModal} onOpenChange={setYoucanModal}>
+        <DialogContent size="md">
+          <DialogTitle className="flex items-center gap-2">
+            <Plug className="size-5 text-primary" />
+            ربط متجر YouCan.shop
+          </DialogTitle>
+          <DialogDescription>
+            خطوات بسيطة لربط متجرك واستقبال طلبات الدفع عند الاستلام (COD) تلقائياً فور تسجيلها.
+          </DialogDescription>
+          <div className="mt-4 space-y-3.5 text-[13px]">
+            <div className="rounded-xl border border-border bg-surface-2 p-3">
+              <p className="font-semibold text-foreground">1. رابط الـ Webhook الخاص بمتجرك:</p>
+              <div className="mt-1.5 flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2">
+                <code className="text-[12px] font-mono select-all text-primary truncate" dir="ltr">
+                  {baseUrl}/api/v1/integrations/youcan
+                </code>
+                <Button size="iconSm" variant="ghost" onClick={() => copy(`${baseUrl}/api/v1/integrations/youcan`)}>
+                  {copied ? <Check className="size-3.5 text-success" /> : <Copy className="size-3.5" />}
+                </Button>
+              </div>
+            </div>
+
+            <ol className="space-y-2 text-muted-foreground list-decimal list-inside leading-6">
+              <li>افتح لوحة تحكم متجرك في <strong>YouCan</strong>.</li>
+              <li>انتقل إلى <strong>الإعدادات (Settings)</strong> ثم اختر <strong>Webhooks</strong>.</li>
+              <li>اضغط على <strong>إضافة Webhook جديد</strong> والصق الرابط أعلاه.</li>
+              <li>اختر الحدث (Event): <strong>order.create</strong>.</li>
+              <li>احفظ التغييرات — سيتم إرسال أي طلب جديد مباشرة إلى مسار مع كافة التفاصيل!</li>
+            </ol>
+          </div>
+          <DialogFooter className="mt-4">
+            <Button onClick={() => setYoucanModal(false)}>
+              فهمت، تم
             </Button>
           </DialogFooter>
         </DialogContent>

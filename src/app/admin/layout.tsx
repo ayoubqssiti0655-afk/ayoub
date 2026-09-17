@@ -45,6 +45,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         { href: "/admin/audit", label: "nav.audit", icon: "ScrollText" },
         { href: "/admin/notifications", label: "nav.notificationsLog", icon: "Bell" },
         { href: "/admin/features", label: "features.title", icon: "Sparkles" },
+        { href: "/admin/settings", label: "admin.settings.title", icon: "Settings" },
       ],
     },
   ];

@@ -130,8 +130,20 @@ export function CourierDeliveryClient({ d, exchangeEnabled = true }: { d: Courie
           <a href={`tel:${d.customerPhone}`} className="flex h-11 flex-col items-center justify-center gap-0.5 rounded-xl bg-primary text-[11px] font-semibold text-primary-foreground">
             <Phone className="size-4" /> {t("common.call")}
           </a>
-          <a href={waLink(d.customerPhone)} target="_blank" rel="noreferrer" className="flex h-11 flex-col items-center justify-center gap-0.5 rounded-xl border border-border text-[11px] font-semibold">
-            <MessageCircle className="size-4" /> WhatsApp
+          <a
+            href={waLink(
+              d.customerPhone,
+              t("whatsapp.courierMessage", {
+                name: d.customerName,
+                cod: d.codAmount > 0 ? money(d.codAmount) : t("payment.PREPAID"),
+                merchant: d.merchantName,
+              })
+            )}
+            target="_blank"
+            rel="noreferrer"
+            className="flex h-11 flex-col items-center justify-center gap-0.5 rounded-xl border border-border text-[11px] font-semibold transition-colors hover:border-[#25D366]/40 hover:bg-[#25D366]/10"
+          >
+            <MessageCircle className="size-4 text-[#25D366]" /> WhatsApp
           </a>
           <a href={mapsLink(d.gpsLat, d.gpsLng, `${d.address}, ${d.city}`)} target="_blank" rel="noreferrer" className="flex h-11 flex-col items-center justify-center gap-0.5 rounded-xl border border-border text-[11px] font-semibold">
             <MapPin className="size-4" /> {t("common.navigate")}
