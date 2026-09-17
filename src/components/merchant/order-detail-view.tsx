@@ -12,6 +12,8 @@ import { DisputeButton } from "@/components/merchant/dispute-button";
 import { avatarHue, mapsLink, waLink } from "@/lib/format";
 import { ChevronLeft, Phone, MessageCircle, MapPin, Banknote, Truck, Clock3 } from "lucide-react";
 
+import { OrderRelanceDialog } from "@/components/merchant/order-relance-dialog";
+
 export async function OrderDetailView({ id, mode }: { id: string; mode: "merchant" | "admin" }) {
   const i = await getI18n();
   const features = await (async () => (await import("@/server/features")).getFeatureMap())();
@@ -109,6 +111,19 @@ export async function OrderDetailView({ id, mode }: { id: string; mode: "merchan
           )}
         </div>
       </div>
+
+      {/* Relance SAV Banner & Dialog */}
+      {mode === "merchant" && (
+        <OrderRelanceDialog
+          orderId={order.id}
+          reference={order.reference}
+          status={order.status}
+          customerPhone={order.customer.phone}
+          deliveryAddress={order.deliveryAddress}
+          failureReason={order.delivery?.failureReason}
+          enabled={features.order_relance_sav}
+        />
+      )}
 
       {/* stepper */}
       <div className="mb-4 overflow-x-auto rounded-xl border border-border bg-surface p-4 shadow-xs">

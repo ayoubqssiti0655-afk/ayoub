@@ -15,19 +15,36 @@ export default async function ReturnsPage() {
   if (!ctx) return null;
   const i = await getI18n();
 
-  const returns = await db.return.findMany({
-    where: { merchantId: ctx.merchant.id },
-    include: {
-      order: { include: { customer: { select: { fullName: true } } } },
-      courier: { include: { user: { select: { name: true } } } },
-    },
-    orderBy: { requestedAt: "desc" },
-    take: 100,
-  });
+  const [returns, returnManifestEnabled] = await Promise.all([
+    db.return.findMany({
+      where: { merchantId: ctx.merchant.id },
+      include: {
+        order: { include: { customer: { select: { fullName: true } } } },
+        courier: { include: { user: { select: { name: true } } } },
+      },
+      orderBy: { requestedAt: "desc" },
+      take: 100,
+    }),
+    (await import("@/server/features")).isFeatureEnabled("return_manifest"),
+  ]);
 
   return (
     <>
-      <PageHeader title={i.t("returns.title")} subtitle={i.t("returns.subtitle", { count: i.num(returns.length) })} />
+      <PageHeader
+        title={i.t("returns.title")}
+        subtitle={i.t("returns.subtitle", { count: i.num(returns.length) })}
+        actions={
+          returnManifestEnabled && returns.length > 0 ? (
+            <Link
+              href="/app/returns/return-manifest"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-[12.5px] font-medium shadow-xs hover:bg-muted"
+            >
+              <RotateCcw className="size-4 text-amber-600" />
+              <span>Bordereau de retour (PDF)</span>
+            </Link>
+          ) : undefined
+        }
+      />
       <div className="rounded-xl border border-border bg-surface shadow-xs">
         {returns.length === 0 ? (
           <EmptyState icon="RotateCcw" title={i.t("returns.empty")} description={i.t("returns.emptyDesc")} />

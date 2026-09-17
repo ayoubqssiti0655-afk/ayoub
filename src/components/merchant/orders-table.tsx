@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Wand2, ArrowUpDown, CheckCheck, ChevronDown, Columns3, Download, EyeOff, Filter, PackageCheck,
-  Search, ShoppingCart, Truck, X, Ban, FileSpreadsheet, Printer, MessageCircle,
+  Search, ShoppingCart, Truck, X, Ban, FileSpreadsheet, Printer, MessageCircle, FileCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n/provider";
@@ -47,6 +47,8 @@ export function OrdersTable({
   couriers,
   basePath = "/app/orders",
   autoAssignEnabled = true,
+  pickupManifestEnabled = true,
+  googleSheetsEnabled = true,
 }: {
   rows: OrderRow[];
   total: number;
@@ -57,6 +59,8 @@ export function OrdersTable({
   couriers: { id: string; name: string }[];
   basePath?: string;
   autoAssignEnabled?: boolean;
+  pickupManifestEnabled?: boolean;
+  googleSheetsEnabled?: boolean;
 }) {
   const { t, money, date, phone: fmtPhone } = useI18n();
   const router = useRouter();
@@ -290,6 +294,22 @@ export function OrdersTable({
           >
             <Printer className="size-3.5" /> {t("orders.printLabels")}
           </Button>
+          {pickupManifestEnabled && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={pending}
+              onClick={() => {
+                const ids = Array.from(selected).join(",");
+                window.open(`/app/orders/pickup-manifest?ids=${ids}`, "_blank");
+              }}
+              className="border-primary/40 bg-primary/5 text-primary hover:bg-primary/10"
+              title="Générer le bordereau de ramassage officiel avec code-barres"
+            >
+              <FileCheck className="size-3.5" />
+              <span>{t("orders.pickupManifest") || "Bon de ramassage"}</span>
+            </Button>
+          )}
           {autoAssignEnabled && (
             <Button size="sm" variant="outline" disabled={pending} onClick={() => bulk("auto")} title={t("autoAssign.hint")}>
               <Wand2 className="size-3.5" /> {t("autoAssign.button")}
@@ -419,6 +439,7 @@ export function OrdersTable({
         open={importOpen}
         onOpenChange={setImportOpen}
         cities={cities}
+        googleSheetsEnabled={googleSheetsEnabled}
       />
     </div>
   );

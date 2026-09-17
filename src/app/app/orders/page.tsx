@@ -78,6 +78,8 @@ export default async function OrdersPage({
           cities={cities}
           couriers={couriers.map((c) => ({ id: c.id, name: c.user.name }))}
           autoAssignEnabled={features.auto_dispatch}
+          pickupManifestEnabled={features.pickup_manifest}
+          googleSheetsEnabled={features.google_sheets_sync}
         />
       </Suspense>
     </>

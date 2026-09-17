@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Plus, ShoppingBasket, Trash2, ShieldCheck, ShieldAlert, ShieldQuestion, RefreshCcw, UserRoundCheck } from "lucide-react";
+import { Plus, ShoppingBasket, Trash2, ShieldCheck, ShieldAlert, ShieldQuestion, RefreshCcw, UserRoundCheck, PackageCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { AddressIQ } from "@/components/merchant/address-iq";
 import { useI18n } from "@/i18n/provider";
@@ -17,12 +17,27 @@ export type CityFee = { name: string; fee: number };
 type Product = { id: string; name: string; price: number; sku: string | null; stock: number };
 type Item = { key: number; productId?: string; name: string; sku?: string; quantity: number; unitPrice: number };
 
-export function NewOrderForm({ products, cities, trustEnabled = true, exchangeEnabled = true, addressIQEnabled = true }: { products: Product[]; cities: CityFee[]; trustEnabled?: boolean; exchangeEnabled?: boolean; addressIQEnabled?: boolean }) {
+export function NewOrderForm({
+  products,
+  cities,
+  trustEnabled = true,
+  exchangeEnabled = true,
+  addressIQEnabled = true,
+  allowOpenParcelEnabled = true,
+}: {
+  products: Product[];
+  cities: CityFee[];
+  trustEnabled?: boolean;
+  exchangeEnabled?: boolean;
+  addressIQEnabled?: boolean;
+  allowOpenParcelEnabled?: boolean;
+}) {
   const { t, money } = useI18n();
   const router = useRouter();
   const toast = useToast();
   const [items, setItems] = React.useState<Item[]>([]);
   const [cod, setCod] = React.useState(true);
+  const [allowOpenParcel, setAllowOpenParcel] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
   const [errors, setErrors] = React.useState<Record<string, string>>({});
   const [trust, setTrust] = React.useState<{ found: boolean; fullName?: string; city?: string; address?: string; notes?: string; id?: string; trust?: { score: number; band: string; delivered: number; failed: number; returned: number } } | null>(null);
@@ -113,6 +128,7 @@ export function NewOrderForm({ products, cities, trustEnabled = true, exchangeEn
       cod,
       notes: "",
       exchangeFor: isExchange ? exchangeFor.trim().toUpperCase() : "",
+      allowOpenParcel: allowOpenParcelEnabled ? allowOpenParcel : undefined,
     });
     setSaving(false);
     if (res.ok && res.data) {
@@ -329,6 +345,20 @@ export function NewOrderForm({ products, cities, trustEnabled = true, exchangeEn
                 <Field label={t("exchange.for")} error={errors.exchangeFor}>
                   <Input value={exchangeFor} onChange={(e) => setExchangeFor(e.target.value)} placeholder="MSR-8X2K4Q" dir="ltr" className="tnum uppercase" />
                 </Field>
+              </div>
+            )}
+
+            {/* allow opening parcel */}
+            {allowOpenParcelEnabled && (
+              <div className="mt-2.5 flex items-center justify-between rounded-lg border border-border bg-surface-2 px-3 py-2.5">
+                <div className="flex items-center gap-2">
+                  <PackageCheck className="size-4 text-emerald-600 dark:text-emerald-400" />
+                  <div>
+                    <p className="text-[13px] font-medium leading-tight">{t("order.allowOpenParcel") || "Ouvrir le colis avant paiement"}</p>
+                    <p className="text-[11px] text-muted-foreground">{allowOpenParcel ? (t("order.allowOpenYes") || "Autorisé au client") : (t("order.allowOpenNo") || "Non autorisé")}</p>
+                  </div>
+                </div>
+                <Switch checked={allowOpenParcel} onCheckedChange={setAllowOpenParcel} aria-label="Autoriser l'ouverture du colis" />
               </div>
             )}
 

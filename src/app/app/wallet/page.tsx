@@ -128,6 +128,7 @@ export default async function WalletPage({ searchParams }: { searchParams: Promi
         cycleChosen={cycleChosenSetting?.value === "true"}
         transactions={transactions}
         settlements={settlementRows}
+        taxInvoicesEnabled={features.tax_invoices}
         page={page}
         totalPages={Math.max(1, Math.ceil(settlementRows.length / per))}
         total={settlementRows.length}

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Check, Eraser, MapPin, MessageCircle, Phone, Camera, PenLine, Hash, TriangleAlert, CalendarClock, ChevronLeft } from "lucide-react";
+import { Check, Eraser, MapPin, MessageCircle, Phone, Camera, PenLine, Hash, TriangleAlert, CalendarClock, ChevronLeft, PackageCheck } from "lucide-react";
 import { useI18n } from "@/i18n/provider";
 import { Button } from "@/components/ui/button";
 import { Select, Textarea, Label } from "@/components/ui/input";
@@ -20,11 +20,12 @@ export type CourierDeliveryDetail = {
   merchantName: string; gpsLat: number | null; gpsLng: number | null;
   exchangeFor?: string | null;
   slotDate?: string | null; slotWindow?: string | null;
+  allowOpenParcel?: boolean;
 };
 
 const FAIL_REASONS = ["NO_ANSWER", "WRONG_ADDRESS", "POSTPONED", "REFUSED", "OUT_OF_ZONE", "UNREACHABLE"];
 
-export function CourierDeliveryClient({ d, exchangeEnabled = true }: { d: CourierDeliveryDetail; exchangeEnabled?: boolean }) {
+export function CourierDeliveryClient({ d, exchangeEnabled = true, allowOpenParcelEnabled = true }: { d: CourierDeliveryDetail; exchangeEnabled?: boolean; allowOpenParcelEnabled?: boolean }) {
   const { t, money, phone: fmtPhone } = useI18n();
   const router = useRouter();
   const toast = useToast();
@@ -110,6 +111,20 @@ export function CourierDeliveryClient({ d, exchangeEnabled = true }: { d: Courie
           {d.address}, {d.city}
         </p>
         {d.note && <p className="mt-2 rounded-lg bg-warning-soft px-2.5 py-1.5 text-[12.5px] text-warning">{d.note}</p>}
+        {allowOpenParcelEnabled && (
+          <div className={`mt-2 flex items-center gap-2 rounded-lg px-2.5 py-2 text-[12px] font-semibold ${
+            d.allowOpenParcel
+              ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+              : "border border-border bg-surface-2 text-muted-foreground"
+          }`}>
+            <PackageCheck className="size-4 shrink-0" />
+            <span>
+              {d.allowOpenParcel
+                ? "✓ OUVERTURE DU COLIS AUTORISÉE (معاينة الطرد مسموحة)"
+                : "✗ NE PAS OUVRIR AVANT PAIEMENT (ممنوع الفتح قبل الأداء)"}
+            </span>
+          </div>
+        )}
         {d.slotDate && d.slotWindow && (
           <p className="mt-2 flex items-center gap-1.5 rounded-lg bg-primary-soft px-2.5 py-1.5 text-[12.5px] font-semibold text-primary tnum">
             {t("courier.slot")} : {d.slotDate} · {d.slotWindow}

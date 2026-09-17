@@ -42,8 +42,10 @@ export default async function CourierDeliveryPage({ params }: { params: Promise<
         exchangeFor: delivery.order.exchangeFor,
         slotDate: delivery.order.slotDate,
         slotWindow: delivery.order.slotWindow,
+        allowOpenParcel: (delivery.order.notes?.includes("[OUVRIR_COLIS]") || delivery.order.internalNote?.includes("[OUVRIR_COLIS]")) ?? false,
       }}
       exchangeEnabled={features.exchange_orders}
+      allowOpenParcelEnabled={features.allow_open_parcel}
     />
   );
 }

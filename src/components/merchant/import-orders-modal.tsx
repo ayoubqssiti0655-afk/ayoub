@@ -2,12 +2,12 @@
 
 import * as React from "react";
 import * as XLSX from "xlsx";
-import { Upload, Download, FileSpreadsheet, CheckCircle2, AlertCircle, X, ArrowRight } from "lucide-react";
+import { Upload, Download, FileSpreadsheet, CheckCircle2, AlertCircle, X, ArrowRight, Sheet, RefreshCw } from "lucide-react";
 import { useI18n } from "@/i18n/provider";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
-import { bulkImportOrdersAction, type BulkImportRowInput } from "@/server/actions";
+import { bulkImportOrdersAction, fetchGoogleSheetRowsAction, type BulkImportRowInput } from "@/server/actions";
 
 type ParsedItem = BulkImportRowInput & {
   isValid: boolean;
@@ -18,17 +18,47 @@ export function ImportOrdersModal({
   open,
   onOpenChange,
   cities,
+  googleSheetsEnabled = true,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   cities: string[];
+  googleSheetsEnabled?: boolean;
 }) {
   const { t } = useI18n();
   const toast = useToast();
+  const [mode, setMode] = React.useState<"file" | "sheets">("file");
+  const [sheetUrl, setSheetUrl] = React.useState("");
+  const [fetchingSheet, setFetchingSheet] = React.useState(false);
   const [items, setItems] = React.useState<ParsedItem[]>([]);
   const [fileName, setFileName] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  async function handleFetchGoogleSheet() {
+    if (!sheetUrl.trim()) return;
+    setFetchingSheet(true);
+    const res = await fetchGoogleSheetRowsAction(sheetUrl.trim());
+    setFetchingSheet(false);
+    if (res.ok && res.data) {
+      const parsed: ParsedItem[] = res.data.rows.map((r) => {
+        let isValid = true;
+        let error: string | undefined;
+        if (!r.fullName.trim()) { isValid = false; error = "Nom manquant"; }
+        else if (!/^0[67]\d{8}$/.test(r.phone)) { isValid = false; error = "Téléphone marocain invalide (06/07)"; }
+        return {
+          ...r,
+          isValid,
+          error,
+        };
+      });
+      setItems(parsed);
+      setFileName(`Google Sheets (${parsed.length} lignes)`);
+      toast.push({ title: `${parsed.length} commandes chargées depuis Google Sheets`, variant: "success" });
+    } else {
+      toast.push({ title: res.message ?? "Erreur de chargement Google Sheets", variant: "error" });
+    }
+  }
 
   function downloadTemplate() {
     const data = [
@@ -184,38 +214,114 @@ export function ImportOrdersModal({
         </DialogDescription>
 
         <div className="mt-4 space-y-4">
-          {/* Download template banner */}
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary-soft p-3.5">
-            <div>
-              <p className="text-[13px] font-semibold text-primary">هل تحتاج إلى نموذج جاهز؟</p>
-              <p className="text-[12px] text-muted-foreground">حمل نموذج إكسل بالمطابقة المغربية لتعبئة طلباتك بسهولة</p>
+          {/* Source Selector: Fichier Excel vs Google Sheets */}
+          {googleSheetsEnabled && (
+            <div className="flex items-center gap-1 rounded-xl border border-border bg-surface-2 p-1 text-[12.5px]">
+              <button
+                type="button"
+                onClick={() => setMode("file")}
+                className={`flex-1 flex items-center justify-center gap-2 rounded-lg py-1.5 font-medium transition-all ${
+                  mode === "file"
+                    ? "bg-surface text-foreground shadow-xs font-semibold"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <FileSpreadsheet className="size-3.5 text-emerald-600" />
+                <span>Fichier Excel / CSV</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode("sheets")}
+                className={`flex-1 flex items-center justify-center gap-2 rounded-lg py-1.5 font-medium transition-all ${
+                  mode === "sheets"
+                    ? "bg-surface text-foreground shadow-xs font-semibold"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Sheet className="size-3.5 text-emerald-600" />
+                <span>Google Sheets (مزامنة مباشرة)</span>
+              </button>
             </div>
-            <Button size="sm" variant="outline" onClick={downloadTemplate}>
-              <Download className="size-3.5" />
-              {t("orders.downloadTemplate")}
-            </Button>
-          </div>
+          )}
 
-          {/* Upload input */}
-          <div
-            onClick={() => fileInputRef.current?.click()}
-            className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-surface-2 px-6 py-7 text-center transition-colors hover:border-primary/50"
-          >
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx, .xls, .csv"
-              className="hidden"
-              onChange={handleFile}
-            />
-            <div className="flex size-11 items-center justify-center rounded-xl bg-surface shadow-xs">
-              <Upload className="size-5 text-primary" />
+          {/* Google Sheets Form */}
+          {mode === "sheets" && (
+            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="rounded-xl bg-emerald-500/10 p-2 text-emerald-600">
+                  <Sheet className="size-5" />
+                </div>
+                <div>
+                  <h4 className="text-[13px] font-bold text-foreground">
+                    المزامنة الفورية مع جداول Google Sheets
+                  </h4>
+                  <p className="text-[11.5px] text-muted-foreground mt-0.5">
+                    ألصق رابط Google Sheets لسحب الطلبات تلقائياً ومطابقة الأعمدة وأرقام الهواتف.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  value={sheetUrl}
+                  onChange={(e) => setSheetUrl(e.target.value)}
+                  placeholder="https://docs.google.com/spreadsheets/d/..."
+                  className="flex-1 rounded-xl border border-border bg-surface px-3 py-2 text-[12.5px] focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  dir="ltr"
+                />
+                <Button
+                  type="button"
+                  disabled={fetchingSheet || !sheetUrl.trim()}
+                  onClick={handleFetchGoogleSheet}
+                  className="font-semibold shadow-sm shrink-0"
+                >
+                  <RefreshCw className={`size-3.5 ${fetchingSheet ? "animate-spin" : ""}`} />
+                  <span>{fetchingSheet ? "Chargement..." : "Charger"}</span>
+                </Button>
+              </div>
+              <p className="text-[11px] text-muted-foreground italic">
+                * ملاحظة: تأكد من تفعيل إمكانية الوصول في Google Sheets: Partager → Tous les utilisateurs disposant du lien (Anyone with the link).
+              </p>
             </div>
-            <p className="mt-3 text-[13.5px] font-medium">
-              {fileName ? fileName : t("orders.dropExcel")}
-            </p>
-            <p className="mt-1 text-[11.5px] text-muted-foreground">يدعم ملفات Excel (.xlsx, .xls) و CSV</p>
-          </div>
+          )}
+
+          {/* Download template banner */}
+          {mode === "file" && (
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary-soft p-3.5">
+                <div>
+                  <p className="text-[13px] font-semibold text-primary">هل تحتاج إلى نموذج جاهز؟</p>
+                  <p className="text-[12px] text-muted-foreground">حمل نموذج إكسل بالمطابقة المغربية لتعبئة طلباتك بسهولة</p>
+                </div>
+                <Button size="sm" variant="outline" onClick={downloadTemplate}>
+                  <Download className="size-3.5" />
+                  {t("orders.downloadTemplate")}
+                </Button>
+              </div>
+
+              {/* Upload input */}
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-surface-2 px-6 py-7 text-center transition-colors hover:border-primary/50"
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx, .xls, .csv"
+                  className="hidden"
+                  onChange={handleFile}
+                />
+                <div className="flex size-11 items-center justify-center rounded-xl bg-surface shadow-xs">
+                  <Upload className="size-5 text-primary" />
+                </div>
+                <p className="mt-3 text-[13.5px] font-medium">
+                  {fileName ? fileName : t("orders.dropExcel")}
+                </p>
+                <p className="mt-1 text-[11.5px] text-muted-foreground">يدعم ملفات Excel (.xlsx, .xls) و CSV</p>
+              </div>
+            </>
+          )}
 
           {/* Parsed list preview */}
           {items.length > 0 && (

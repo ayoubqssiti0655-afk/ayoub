@@ -39,6 +39,12 @@ export const FEATURES = [
   { key: "weight_capture", icon: "Weight", category: "merchant" },
   { key: "invoices", icon: "FileText", category: "merchant" },
   { key: "promo_codes", icon: "TicketPercent", category: "merchant" },
+  { key: "pickup_manifest", icon: "FileCheck", category: "merchant" },
+  { key: "return_manifest", icon: "RotateCcw", category: "merchant" },
+  { key: "thermal_labels", icon: "Printer", category: "merchant" },
+  { key: "allow_open_parcel", icon: "PackageCheck", category: "merchant" },
+  { key: "google_sheets_sync", icon: "Sheet", category: "merchant" },
+  { key: "order_relance_sav", icon: "PhoneForwarded", category: "merchant" },
 
   // AI & Smart Logistics
   { key: "auto_dispatch", icon: "Wand2", category: "logistics_ai" },
@@ -54,6 +60,7 @@ export const FEATURES = [
   { key: "instant_payout", icon: "Zap", category: "finance" },
   { key: "online_payment", icon: "CreditCard", category: "finance" },
   { key: "payout_frequency", icon: "CalendarClock", category: "finance" },
+  { key: "tax_invoices", icon: "FileSpreadsheet", category: "finance" },
 
   // Customer Communication & Tracking
   { key: "whatsapp", icon: "MessageCircle", category: "communication" },

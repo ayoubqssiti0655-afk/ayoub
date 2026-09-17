@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { LayoutDashboard, Package, ShoppingCart, Users, Truck, RotateCcw, Wallet, ChartLine, Plug, Settings, Plus, PhoneCall, LifeBuoy, FileText, Store } from "lucide-react";
 import { db } from "@/server/db";
 import { getCurrentUser } from "@/lib/auth";
+import { isFeatureEnabled } from "@/server/features";
 import { AppShell, type NavSection } from "@/components/layout/app-shell";
 
 
@@ -11,10 +12,11 @@ export default async function MerchantLayout({ children }: { children: React.Rea
   const merchantId = user.staffProfile?.merchantId;
   if (!merchantId) redirect("/login");
 
-  const [merchant, newOrders, unread] = await Promise.all([
+  const [merchant, newOrders, unread, taxInvoicesEnabled] = await Promise.all([
     db.merchant.findUnique({ where: { id: merchantId } }),
     db.order.count({ where: { merchantId, status: "NEW" } }),
     db.notification.count({ where: { userId: user.id, readAt: null } }),
+    isFeatureEnabled("tax_invoices"),
   ]);
   if (!merchant) redirect("/login");
 
@@ -45,6 +47,7 @@ export default async function MerchantLayout({ children }: { children: React.Rea
       label: "nav.group.finance",
       items: [
         { href: "/app/wallet", label: "nav.wallet", icon: "Wallet" },
+        ...(taxInvoicesEnabled ? [{ href: "/app/invoices", label: "invoices.title", icon: "FileText" as const }] : []),
         { href: "/app/analytics", label: "nav.analytics", icon: "ChartLine" },
       ],
     },
@@ -54,7 +57,6 @@ export default async function MerchantLayout({ children }: { children: React.Rea
         { href: "/app/integrations", label: "nav.integrations", icon: "Plug" },
         { href: "/app/settings", label: "nav.settings", icon: "Settings" },
         { href: "/app/tickets", label: "tickets.title", icon: "LifeBuoy" },
-        { href: "/app/invoices", label: "invoices.title", icon: "FileText" },
         { href: "/store/" + merchant.slug, label: "storefront.open", icon: "Store" },
       ],
     },

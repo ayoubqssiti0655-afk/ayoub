@@ -101,6 +101,7 @@ export function WalletClient({
   bankDetails: initialBankDetails,
   instantPayoutEnabled = false,
   payoutFrequencyEnabled = true,
+  taxInvoicesEnabled = true,
   merchantName,
   settlementCycle = "WEEKLY",
   cycleChosen = false,
@@ -115,6 +116,7 @@ export function WalletClient({
   bankDetails: BankDetails | null;
   instantPayoutEnabled?: boolean;
   payoutFrequencyEnabled?: boolean;
+  taxInvoicesEnabled?: boolean;
   merchantName: string;
   settlementCycle?: string;
   cycleChosen?: boolean;
@@ -670,15 +672,26 @@ export function WalletClient({
                     {s.paidAt ? date(s.paidAt) : "—"}
                   </TD>
                   <TD className="text-end">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 gap-1 text-[11.5px]"
-                      onClick={() => setSelectedSettlement(s)}
-                    >
-                      <Printer className="size-3.5" />
-                      <span>{t("wallet.receipt.print")}</span>
-                    </Button>
+                    <div className="flex items-center justify-end gap-1.5">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 gap-1 text-[11.5px]"
+                        onClick={() => setSelectedSettlement(s)}
+                      >
+                        <Printer className="size-3.5" />
+                        <span>{t("wallet.receipt.print")}</span>
+                      </Button>
+                      {taxInvoicesEnabled && (
+                        <a
+                          href={`/app/invoices/${s.id}`}
+                          className="inline-flex h-8 items-center gap-1 rounded-lg border border-primary/20 bg-primary/5 px-2.5 text-[11.5px] font-semibold text-primary hover:bg-primary/10 transition-colors"
+                        >
+                          <FileText className="size-3.5" />
+                          <span>Facture TVA</span>
+                        </a>
+                      )}
+                    </div>
                   </TD>
                 </TR>
               ))}
@@ -1137,10 +1150,19 @@ export function WalletClient({
               </div>
 
               {/* Print action buttons */}
-              <DialogFooter className="print:hidden">
+              <DialogFooter className="print:hidden gap-2">
                 <Button variant="ghost" onClick={() => setSelectedSettlement(null)}>
                   {t("wallet.receipt.close")}
                 </Button>
+                {taxInvoicesEnabled && (
+                  <a
+                    href={`/app/invoices/${selectedSettlement.id}`}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/5 px-3 text-[12.5px] font-semibold text-primary hover:bg-primary/10 transition-colors"
+                  >
+                    <FileText className="size-4" />
+                    <span>Facture TVA (14%)</span>
+                  </a>
+                )}
                 <Button onClick={() => window.print()} className="gap-1.5">
                   <Printer className="size-4" />
                   {t("wallet.receipt.print")}

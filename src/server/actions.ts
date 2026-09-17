@@ -49,12 +49,16 @@ const createOrderSchema = z.object({
   cod: z.boolean().default(true),
   notes: z.string().max(500).optional().or(z.literal("")),
   exchangeFor: z.string().max(12).optional().or(z.literal("")),
+  allowOpenParcel: z.boolean().optional(),
 });
 
 export async function createOrderAction(input: unknown): Promise<ActionResult> {
   try {
     const { merchant, user } = await requireMerchant();
     const data = createOrderSchema.parse(input);
+    const orderNotes = data.allowOpenParcel
+      ? `[OUVRIR_COLIS] ${data.notes || ""}`.trim()
+      : data.notes || undefined;
     const order = await createOrder({
       merchantId: merchant.id,
       customer: {
@@ -67,7 +71,7 @@ export async function createOrderAction(input: unknown): Promise<ActionResult> {
       shippingFee: data.shippingFee,
       discount: data.discount,
       paymentMethod: data.cod ? "COD" : "PREPAID",
-      notes: data.notes || undefined,
+      notes: orderNotes,
       exchangeFor: data.exchangeFor || undefined,
     });
     await audit({ actorId: user.id, actorName: user.name, actorType: "MERCHANT", action: "ORDER_CREATED", entity: "Order", entityId: order.id, meta: order.reference });
@@ -699,3 +703,164 @@ export async function markReturnReceivedAction(returnId: string): Promise<Action
     return { ok: true };
   } catch (e) { return fail(e); }
 }
+
+export async function relanceOrderAction(input: {
+  orderId: string;
+  phone?: string;
+  address?: string;
+  notes?: string;
+  nextDate?: string;
+}): Promise<ActionResult> {
+  try {
+    const { merchant, user } = await requireMerchant();
+    const order = await db.order.findFirst({
+      where: { id: input.orderId, merchantId: merchant.id },
+      include: { customer: true, delivery: true },
+    });
+    if (!order) return { ok: false, message: "Commande introuvable" };
+
+    const updates: Record<string, unknown> = {};
+    if (input.address && input.address.trim()) {
+      updates.deliveryAddress = input.address.trim();
+    }
+    const cleanNotes = input.notes?.trim() || "";
+    if (cleanNotes) {
+      const existing = order.notes ? `${order.notes} | ` : "";
+      updates.notes = `${existing}RELANCE SAV: ${cleanNotes}`;
+    }
+
+    if (input.phone && input.phone.trim()) {
+      const p = input.phone.replace(/\s/g, "");
+      await db.customer.update({
+        where: { id: order.customerId },
+        data: { secondaryPhone: p },
+      });
+    }
+
+    // Reset status from FAILED to CONFIRMED
+    if (order.status === "FAILED") {
+      updates.status = "CONFIRMED";
+      updates.failedAt = null;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await db.order.update({
+        where: { id: order.id },
+        data: updates,
+      });
+    }
+
+    if (order.delivery) {
+      await db.delivery.update({
+        where: { id: order.delivery.id },
+        data: {
+          status: "ASSIGNED",
+          failureReason: null,
+          nextActionAt: input.nextDate ? new Date(input.nextDate) : new Date(Date.now() + 24 * 3600000),
+        },
+      });
+    }
+
+    await db.orderEvent.create({
+      data: {
+        orderId: order.id,
+        type: "NOTE",
+        actorType: "MERCHANT",
+        actorName: user.name,
+        message: `Relance SAV effectuée par le marchand: ${cleanNotes || "Nouvelle tentative demandée"}${input.phone ? ` (Nouveau tél: ${input.phone})` : ""}`,
+      },
+    });
+
+    await audit({
+      actorId: user.id,
+      actorName: user.name,
+      actorType: "MERCHANT",
+      action: "ORDER_RELANCED",
+      entity: "Order",
+      entityId: order.id,
+      meta: order.reference,
+    });
+
+    revalidatePath(`/app/orders/${order.id}`);
+    revalidatePath("/app/orders");
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function fetchGoogleSheetRowsAction(url: string): Promise<ActionResult<{ rows: BulkImportRowInput[]; count: number }>> {
+  try {
+    await requireMerchant();
+    let csvUrl = url.trim();
+    const sheetIdMatch = csvUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    if (sheetIdMatch && sheetIdMatch[1]) {
+      const id = sheetIdMatch[1];
+      csvUrl = `https://docs.google.com/spreadsheets/d/${id}/export?format=csv`;
+    }
+
+    const res = await fetch(csvUrl, { headers: { "User-Agent": "Masar-Sync/1.0" } });
+    if (!res.ok) {
+      return {
+        ok: false,
+        message: "Impossible d'accéder au fichier Google Sheets. Vérifiez que l'accès est public (« Tous les utilisateurs disposant du lien »).",
+      };
+    }
+
+    const csvText = await res.text();
+    const XLSX = await import("xlsx");
+    const wb = XLSX.read(csvText, { type: "string" });
+    const sheetName = wb.SheetNames[0];
+    const ws = wb.Sheets[sheetName];
+    const rawData = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws);
+
+    if (!rawData || rawData.length === 0) {
+      return { ok: false, message: "La feuille Google Sheets est vide" };
+    }
+
+    const rows: BulkImportRowInput[] = [];
+    for (const row of rawData) {
+      const getVal = (patterns: string[]) => {
+        for (const p of patterns) {
+          for (const k of Object.keys(row)) {
+            if (k.toLowerCase().includes(p.toLowerCase())) {
+              return String(row[k] ?? "");
+            }
+          }
+        }
+        return undefined;
+      };
+
+      const fullName = (getVal(["nom", "name", "client", "destinataire", "الاسم"]) || "").trim();
+      const rawPhone = (getVal(["tel", "phone", "mobile", "الهاتف"]) || "").trim();
+      const city = (getVal(["ville", "city", "المدينة"]) || "Casablanca").trim();
+      const address = (getVal(["adresse", "address", "العنوان", "quartier"]) || "Adresse client").trim();
+      const rawCod = getVal(["prix", "montant", "cod", "total", "الثمن", "المبلغ"]);
+      const productName = (getVal(["produit", "article", "item", "product", "المنتج"]) || "Colis").trim();
+      const notes = (getVal(["note", "remarque", "obs", "ملاحظ"]) || "").trim();
+
+      if (!fullName && !rawPhone) continue;
+
+      let phone = rawPhone.replace(/\D/g, "");
+      if (phone.startsWith("212")) phone = "0" + phone.slice(3);
+      if (phone.length === 9 && (phone.startsWith("6") || phone.startsWith("7"))) phone = "0" + phone;
+
+      const numCod = Number(rawCod) || 0;
+      rows.push({
+        fullName: fullName || "Client",
+        phone: phone || "0600000000",
+        city,
+        address,
+        codAmount: numCod,
+        productName,
+        notes: notes || undefined,
+      });
+    }
+
+    return { ok: true, data: { rows, count: rows.length } };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+

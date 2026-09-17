@@ -33,7 +33,14 @@ export default async function NewOrderPage() {
   return (
     <>
       <PageHeader title={i.t("order.new.title")} subtitle={i.t("order.new.desc")} />
-      <NewOrderForm products={products} cities={cityFees} trustEnabled={features.trust_score} exchangeEnabled={features.exchange_orders} addressIQEnabled={features.address_iq} />
+      <NewOrderForm
+        products={products}
+        cities={cityFees}
+        trustEnabled={features.trust_score}
+        exchangeEnabled={features.exchange_orders}
+        addressIQEnabled={features.address_iq}
+        allowOpenParcelEnabled={features.allow_open_parcel}
+      />
     </>
   );
 }

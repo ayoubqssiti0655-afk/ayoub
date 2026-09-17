@@ -9,6 +9,7 @@ import {
   LifeBuoy, UserCog, FileText, Siren, Weight, TicketPercent, Truck, Navigation,
   Receipt, CheckSquare, Bike, Landmark, FileSpreadsheet, ShieldAlert,
   Search, X, Check, SlidersHorizontal, CheckCircle2, XCircle, Power, Circle,
+  FileCheck, RotateCcw, Printer, PackageCheck, Sheet, PhoneForwarded,
 } from "lucide-react";
 import { useI18n } from "@/i18n/provider";
 import { Switch } from "@/components/ui/misc";
@@ -22,6 +23,7 @@ const ICONS: Record<string, React.ComponentType<{ className?: string; strokeWidt
   Star, MapPinned, Brain, Newspaper, ChartLine, Scale, Store, PhoneCall,
   LifeBuoy, UserCog, FileText, Siren, Weight, TicketPercent, Truck, Navigation,
   Receipt, CheckSquare, Bike, Landmark, FileSpreadsheet, ShieldAlert, Circle,
+  FileCheck, RotateCcw, Printer, PackageCheck, Sheet, PhoneForwarded,
 };
 
 export type FeatureRow = {
