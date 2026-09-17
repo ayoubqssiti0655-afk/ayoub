@@ -100,6 +100,7 @@ export function WalletClient({
   stats,
   bankDetails: initialBankDetails,
   instantPayoutEnabled = false,
+  payoutFrequencyEnabled = true,
   merchantName,
   settlementCycle = "WEEKLY",
   cycleChosen = false,
@@ -113,6 +114,7 @@ export function WalletClient({
   stats: WalletStats;
   bankDetails: BankDetails | null;
   instantPayoutEnabled?: boolean;
+  payoutFrequencyEnabled?: boolean;
   merchantName: string;
   settlementCycle?: string;
   cycleChosen?: boolean;
@@ -340,9 +342,9 @@ export function WalletClient({
 
       {/* ── خانة السحب الرئيسية (Main Withdrawal & Payout Hub Card) ── */}
       <div className="mb-5 rounded-2xl border border-primary/25 bg-gradient-to-br from-primary-soft/85 via-surface to-surface p-5 shadow-xs">
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-center">
+        <div className={`grid grid-cols-1 gap-6 ${payoutFrequencyEnabled ? "lg:grid-cols-12 lg:items-center" : ""}`}>
           {/* Left Column: Solde & Request button */}
-          <div className="lg:col-span-5 space-y-4">
+          <div className={`${payoutFrequencyEnabled ? "lg:col-span-5" : "w-full"} space-y-4`}>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <span className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2.5 py-1 text-[11.5px] font-semibold text-primary">
@@ -391,60 +393,62 @@ export function WalletClient({
           </div>
 
           {/* Right Column: اختيار دورية وموعد السحب (Payout Frequency Selector) */}
-          <div className="lg:col-span-7 lg:border-s lg:border-border/70 lg:ps-6">
-            <div className="flex items-center justify-between gap-2 mb-2.5">
-              <div>
-                <p className="text-[13px] font-bold text-foreground">
-                  {t("wallet.cycle.label")}
-                </p>
-                <p className="text-[11.5px] text-muted-foreground">
-                  {t("wallet.cycle.hint")}
-                </p>
+          {payoutFrequencyEnabled && (
+            <div className="lg:col-span-7 lg:border-s lg:border-border/70 lg:ps-6">
+              <div className="flex items-center justify-between gap-2 mb-2.5">
+                <div>
+                  <p className="text-[13px] font-bold text-foreground">
+                    {t("wallet.cycle.label")}
+                  </p>
+                  <p className="text-[11.5px] text-muted-foreground">
+                    {t("wallet.cycle.hint")}
+                  </p>
+                </div>
+                {savingCycle && (
+                  <span className="text-[11px] text-primary animate-pulse font-medium">Enregistrement...</span>
+                )}
               </div>
-              {savingCycle && (
-                <span className="text-[11px] text-primary animate-pulse font-medium">Enregistrement...</span>
-              )}
-            </div>
 
-            {/* 4 Selection Buttons: كل يوم | كل 7 أيام | كل 15 يوم | كل شهر */}
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {[
-                { key: "DAILY", label: t("cycle.DAILY"), icon: Zap },
-                { key: "WEEKLY", label: t("cycle.WEEKLY"), icon: Calendar },
-                { key: "BIWEEKLY", label: t("cycle.BIWEEKLY"), icon: CalendarDays },
-                { key: "MONTHLY", label: t("cycle.MONTHLY"), icon: CalendarRange },
-              ].map((item) => {
-                const Icon = item.icon;
-                const isSelected = cycle === item.key;
-                return (
-                  <button
-                    key={item.key}
-                    type="button"
-                    onClick={() => handleCycleSelect(item.key)}
-                    className={`flex flex-col items-center justify-center gap-1.5 rounded-xl border p-2.5 text-center transition-all ${
-                      isSelected
-                        ? "border-primary bg-primary text-white shadow-sm ring-2 ring-primary/20"
-                        : "border-border bg-surface hover:border-primary/40 hover:bg-surface-2 text-foreground"
-                    }`}
-                  >
-                    <Icon className={`size-4 ${isSelected ? "text-white" : "text-primary"}`} />
-                    <span className="text-[11.5px] font-semibold leading-tight">{item.label}</span>
-                  </button>
-                );
-              })}
-            </div>
+              {/* 4 Selection Buttons: كل يوم | كل 7 أيام | كل 15 يوم | كل شهر */}
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {[
+                  { key: "DAILY", label: t("cycle.DAILY"), icon: Zap },
+                  { key: "WEEKLY", label: t("cycle.WEEKLY"), icon: Calendar },
+                  { key: "BIWEEKLY", label: t("cycle.BIWEEKLY"), icon: CalendarDays },
+                  { key: "MONTHLY", label: t("cycle.MONTHLY"), icon: CalendarRange },
+                ].map((item) => {
+                  const Icon = item.icon;
+                  const isSelected = cycle === item.key;
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => handleCycleSelect(item.key)}
+                      className={`flex flex-col items-center justify-center gap-1.5 rounded-xl border p-2.5 text-center transition-all ${
+                        isSelected
+                          ? "border-primary bg-primary text-white shadow-sm ring-2 ring-primary/20"
+                          : "border-border bg-surface hover:border-primary/40 hover:bg-surface-2 text-foreground"
+                      }`}
+                    >
+                      <Icon className={`size-4 ${isSelected ? "text-white" : "text-primary"}`} />
+                      <span className="text-[11.5px] font-semibold leading-tight">{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
 
-            {/* Scheduled payout note */}
-            <p className="mt-2.5 text-[11.5px] font-medium text-muted-foreground flex items-center gap-1.5">
-              <Clock className="size-3.5 text-primary" />
-              <span>
-                {cycle === "DAILY" && t("wallet.cycle.nextDaily")}
-                {cycle === "WEEKLY" && t("wallet.cycle.nextWeekly")}
-                {cycle === "BIWEEKLY" && t("wallet.cycle.nextBiweekly")}
-                {cycle === "MONTHLY" && t("wallet.cycle.nextMonthly")}
-              </span>
-            </p>
-          </div>
+              {/* Scheduled payout note */}
+              <p className="mt-2.5 text-[11.5px] font-medium text-muted-foreground flex items-center gap-1.5">
+                <Clock className="size-3.5 text-primary" />
+                <span>
+                  {cycle === "DAILY" && t("wallet.cycle.nextDaily")}
+                  {cycle === "WEEKLY" && t("wallet.cycle.nextWeekly")}
+                  {cycle === "BIWEEKLY" && t("wallet.cycle.nextBiweekly")}
+                  {cycle === "MONTHLY" && t("wallet.cycle.nextMonthly")}
+                </span>
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -820,7 +824,7 @@ export function WalletClient({
             )}
 
             {/* Payout cycle info inside dialog */}
-            {!chosen ? (
+            {payoutFrequencyEnabled && (!chosen ? (
               <div className="space-y-1.5 rounded-xl border border-primary/30 bg-primary/5 p-3">
                 <div className="flex items-center justify-between">
                   <label className="text-[12px] font-semibold text-foreground">{t("wallet.cycle.choosePrompt")}</label>
@@ -867,7 +871,7 @@ export function WalletClient({
                   {cycle === "MONTHLY" && t("wallet.cycle.nextMonthly")}
                 </span>
               </div>
-            )}
+            ))}
 
             {/* Instant Payout Toggle (if enabled in Admin) */}
             {instantPayoutEnabled && (

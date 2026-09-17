@@ -53,6 +53,7 @@ export const FEATURES = [
   // Finance & Payments
   { key: "instant_payout", icon: "Zap", category: "finance" },
   { key: "online_payment", icon: "CreditCard", category: "finance" },
+  { key: "payout_frequency", icon: "CalendarClock", category: "finance" },
 
   // Customer Communication & Tracking
   { key: "whatsapp", icon: "MessageCircle", category: "communication" },

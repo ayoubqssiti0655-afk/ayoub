@@ -1210,6 +1210,8 @@ export const en: Dict = {
   "features.f.admin_risk_radar.desc": "Identifies parcels with high return probability based on customer history with recommended phone confirmation.",
   "features.f.admin_smart_dispatch.name": "Morning AI Smart Dispatcher (Auto-Cluster)",
   "features.f.admin_smart_dispatch.desc": "Optimized automatic parcel clustering by neighborhood and courier to save 40% time and fuel.",
+  "features.f.payout_frequency.name": "Payout Frequency (Settlement Cycles)",
+  "features.f.payout_frequency.desc": "Allow merchants to choose their automatic payout schedule (daily, weekly, biweekly, monthly).",
   "courier.nav.googleMaps": "Google Maps",
   "courier.nav.waze": "Waze",
   "courier.nav.choose": "Choose Navigation App",

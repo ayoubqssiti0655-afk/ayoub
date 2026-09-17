@@ -27,6 +27,7 @@ export default async function WalletPage({ searchParams }: { searchParams: Promi
     bankSetting,
     cycleChosenSetting,
     instantPayoutEnabled,
+    payoutFrequencyEnabled,
   ] = await Promise.all([
     db.merchant.findUnique({ where: { id: ctx.merchant.id } }),
     db.codTransaction.count({ where: { merchantId: ctx.merchant.id } }),
@@ -63,6 +64,7 @@ export default async function WalletPage({ searchParams }: { searchParams: Promi
     db.setting.findUnique({ where: { key: `merchant_bank_${ctx.merchant.id}` } }),
     db.setting.findUnique({ where: { key: `merchant_cycle_chosen_${ctx.merchant.id}` } }),
     isFeatureEnabled("instant_payout"),
+    isFeatureEnabled("payout_frequency"),
   ]);
   if (!merchant) return null;
   const features = await getFeatureMap();
@@ -120,6 +122,7 @@ export default async function WalletPage({ searchParams }: { searchParams: Promi
         stats={stats}
         bankDetails={bankDetails}
         instantPayoutEnabled={instantPayoutEnabled}
+        payoutFrequencyEnabled={payoutFrequencyEnabled}
         merchantName={merchant.name}
         settlementCycle={merchant.settlementCycle}
         cycleChosen={cycleChosenSetting?.value === "true"}

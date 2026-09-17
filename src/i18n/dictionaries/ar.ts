@@ -1210,6 +1210,8 @@ export const ar: Dict = {
   "features.f.admin_risk_radar.desc": "كشف الزبائن ذوي سوابق رفض الطرود وتنبيه الإدارة بضرورة التأكيد الهاتفي قبل الشحن.",
   "features.f.admin_smart_dispatch.name": "التوزيع الجغرافي الذكي لطرود الصباح",
   "features.f.admin_smart_dispatch.desc": "فرز وتقسيم الطرود آلياً حسب الأحياء وإسنادها للموزعين لتوفير 40% من الوقت والوقود.",
+  "features.f.payout_frequency.name": "دورية ومواعيد السحب (Fréquence des retraits)",
+  "features.f.payout_frequency.desc": "إتاحة اختيار دورية السحب التلقائي للتاجر (يومياً، أسبوعياً، نصف شهرياً، شهرياً).",
   "courier.nav.googleMaps": "Google Maps",
   "courier.nav.waze": "Waze",
   "courier.nav.choose": "اختر تطبيق الملاحة",

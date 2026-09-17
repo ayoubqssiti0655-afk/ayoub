@@ -1210,6 +1210,8 @@ export const fr: Dict = {
   "features.f.admin_risk_radar.desc": "Détection des numéros et colis à fort risque de refus avec recommandation de confirmation préalable.",
   "features.f.admin_smart_dispatch.name": "Dispatch intelligent du matin (Auto-Cluster)",
   "features.f.admin_smart_dispatch.desc": "Attribution automatique optimisée des colis par quartier et livreur pour économiser 40% de temps.",
+  "features.f.payout_frequency.name": "Fréquence des retraits (Cycles de virement)",
+  "features.f.payout_frequency.desc": "Permettre aux marchands de choisir la fréquence de leurs virements (quotidien, hebdo, etc.).",
   "courier.nav.googleMaps": "Google Maps",
   "courier.nav.waze": "Waze",
   "courier.nav.choose": "Choisir l'application de navigation",
