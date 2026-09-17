@@ -2,15 +2,22 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import * as XLSX from "xlsx";
 import {
   FileSpreadsheet, Download, CheckCircle2, AlertTriangle, Building, ArrowDownToLine,
-  Landmark, Edit2, PlusCircle,
+  Landmark, Edit2, PlusCircle, Copy, Check, ChevronDown, FileText,
 } from "lucide-react";
 import { useI18n } from "@/i18n/provider";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input, Select } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { adminSaveMerchantBankAction, markSettlementPaidAction } from "@/server/admin-actions";
 import { useToast } from "@/components/ui/toast";
 
@@ -150,34 +157,140 @@ export function BulkSettlementExport({
     }
   }
 
-  function exportBankFile(bankType: "STANDARD" | "CIH" | "ATTIJARI") {
+  const [copiedRib, setCopiedRib] = React.useState<string | null>(null);
+
+  function copyRib(rawRib: string) {
+    const clean = rawRib.replace(/\D/g, "");
+    navigator.clipboard.writeText(clean);
+    setCopiedRib(clean);
+    toast.push({ title: "تم نسخ رقم الـ RIB (24 رقماً) بنجاح", variant: "success" });
+    setTimeout(() => setCopiedRib(null), 2500);
+  }
+
+  function exportExcelFile() {
     if (readyWithRib.length === 0) {
       toast.push({ title: "لا يوجد تجار بحسابات بنكية (RIB) مكتملة للتصدير", variant: "error" });
       return;
     }
 
     const dateStr = new Date().toISOString().split("T")[0];
-    let content = "RIB_BENEFICIAIRE,NOM_BENEFICIAIRE,MONTANT_MAD,MOTIF_VIREMENT,DATE\n";
 
-    readyWithRib.forEach((r) => {
+    const data = readyWithRib.map((r) => {
       const cleanRib = r.rib.replace(/\D/g, "");
-      const name = r.accountHolder || r.merchantName;
       const motif = r.reference
-        ? `VIREMENT ${r.reference} ${r.merchantName.slice(0, 15)} ${dateStr}`
-        : `REGLEMENT COD ${r.merchantName.slice(0, 15)} ${dateStr}`;
-      content += `"${cleanRib}","${name.replace(/"/g, '""')}",${r.amountDh.toFixed(2)},"${motif}","${dateStr}"\n`;
+        ? `VIREMENT ${r.reference} ${r.merchantName.slice(0, 15)}`
+        : `REGLEMENT COD ${r.merchantName.slice(0, 15)}`;
+
+      return {
+        "RIB_BENEFICIAIRE (24 Chiffres)": cleanRib,
+        "NOM_BENEFICIAIRE": r.accountHolder || r.merchantName,
+        "MONTANT_MAD": Number(r.amountDh.toFixed(2)),
+        "BANQUE": r.bankName,
+        "MOTIF_VIREMENT": motif,
+        "REFERENCE": r.reference || "COD",
+        "TELEPHONE": r.phone || "",
+        "VILLE": r.city || "",
+        "DATE": dateStr,
+      };
     });
+
+    const ws = XLSX.utils.json_to_sheet(data);
+
+    // Force RIB column cells to be explicit strings with text format '@' so Excel NEVER uses scientific notation
+    readyWithRib.forEach((r, idx) => {
+      const cleanRib = r.rib.replace(/\D/g, "");
+      const cellRef = XLSX.utils.encode_cell({ r: idx + 1, c: 0 });
+      if (ws[cellRef]) {
+        ws[cellRef].t = "s";
+        ws[cellRef].v = cleanRib;
+        ws[cellRef].z = "@";
+      }
+    });
+
+    // Set clear column widths
+    ws["!cols"] = [
+      { wch: 30 }, // RIB
+      { wch: 24 }, // Nom
+      { wch: 16 }, // Montant
+      { wch: 22 }, // Banque
+      { wch: 32 }, // Motif
+      { wch: 18 }, // Reference
+      { wch: 16 }, // Phone
+      { wch: 14 }, // City
+      { wch: 14 }, // Date
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Virements");
+    XLSX.writeFile(wb, `VIREMENTS_MARCHANDS_${dateStr}.xlsx`);
+
+    toast.push({
+      title: `تم تحميل ملف Excel الرسمي (.xlsx) (${readyWithRib.length} تاجر) - كامل بدون اختصار`,
+      variant: "success",
+    });
+  }
+
+  function exportBankCsv(format: "CIH" | "ATTIJARI" | "BCP" | "EXCEL_CSV") {
+    if (readyWithRib.length === 0) {
+      toast.push({ title: "لا يوجد تجار بحسابات بنكية (RIB) مكتملة للتصدير", variant: "error" });
+      return;
+    }
+
+    const dateStr = new Date().toISOString().split("T")[0];
+    let content = "";
+    let filename = "";
+
+    if (format === "CIH") {
+      content = "RIB;NOM_BENEFICIAIRE;MONTANT;MOTIF;DATE\n";
+      readyWithRib.forEach((r) => {
+        const cleanRib = r.rib.replace(/\D/g, "");
+        const name = (r.accountHolder || r.merchantName).replace(/;/g, " ");
+        const motif = (r.reference ? `VIR ${r.reference}` : `COD ${r.merchantName}`).slice(0, 30);
+        content += `${cleanRib};${name};${r.amountDh.toFixed(2)};${motif};${dateStr}\n`;
+      });
+      filename = `VIREMENTS_CIH_BANK_${dateStr}.csv`;
+    } else if (format === "ATTIJARI") {
+      content = "RIB_BENEFICIAIRE;NOM_BENEFICIAIRE;MONTANT;MOTIF;DATE\n";
+      readyWithRib.forEach((r) => {
+        const cleanRib = r.rib.replace(/\D/g, "");
+        const name = (r.accountHolder || r.merchantName).replace(/;/g, " ");
+        const motif = (r.reference ? `VIR ${r.reference}` : `COD ${r.merchantName}`).slice(0, 30);
+        content += `${cleanRib};${name};${r.amountDh.toFixed(2)};${motif};${dateStr}\n`;
+      });
+      filename = `VIREMENTS_ATTIJARIWAFA_${dateStr}.csv`;
+    } else if (format === "BCP") {
+      content = "RIB_BENEFICIAIRE;NOM_BENEFICIAIRE;MONTANT;MOTIF;DATE\n";
+      readyWithRib.forEach((r) => {
+        const cleanRib = r.rib.replace(/\D/g, "");
+        const name = (r.accountHolder || r.merchantName).replace(/;/g, " ");
+        const motif = (r.reference ? `VIR ${r.reference}` : `COD ${r.merchantName}`).slice(0, 30);
+        content += `${cleanRib};${name};${r.amountDh.toFixed(2)};${motif};${dateStr}\n`;
+      });
+      filename = `VIREMENTS_BANQUE_POPULAIRE_${dateStr}.csv`;
+    } else {
+      // CSV Compatible with Excel: uses formula ="2658..." so Excel doesn't turn it into scientific notation
+      content = "sep=,\nRIB_BENEFICIAIRE,NOM_BENEFICIAIRE,MONTANT_MAD,BANQUE,MOTIF_VIREMENT,DATE\n";
+      readyWithRib.forEach((r) => {
+        const cleanRib = r.rib.replace(/\D/g, "");
+        const name = (r.accountHolder || r.merchantName).replace(/"/g, '""');
+        const motif = r.reference
+          ? `VIREMENT ${r.reference} ${r.merchantName.slice(0, 15)}`
+          : `REGLEMENT COD ${r.merchantName.slice(0, 15)}`;
+        content += `="${cleanRib}","${name}",${r.amountDh.toFixed(2)},"${r.bankName}","${motif}","${dateStr}"\n`;
+      });
+      filename = `VIREMENTS_EXCEL_CSV_${dateStr}.csv`;
+    }
 
     const blob = new Blob(["\uFEFF" + content], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `VIREMENTS_MARCHANDS_${bankType}_${dateStr}.csv`;
+    link.download = filename;
     link.click();
     URL.revokeObjectURL(url);
 
     toast.push({
-      title: `تم تحميل ملف التحويلات (${readyWithRib.length} تاجر) بنجاح`,
+      title: `تم تحميل ملف (${filename}) بنجاح`,
       variant: "success",
     });
   }
@@ -194,21 +307,56 @@ export function BulkSettlementExport({
               {t("features.f.admin_bank_settlement_export.name")}
             </h2>
             <p className="text-[12px] text-muted-foreground">
-              توليد ملفات التحويلات البنكية الموحدة (CIH / Attijariwafa / BCP) لصرف الأرباح بنقرة واحدة
+              توليد ملفات التحويلات البنكية الموحدة (CIH / Attijariwafa / BCP) وصرف الأرباح
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Main button: Excel .xlsx (Opens directly in Excel without scientific notation) */}
           <Button
             size="sm"
-            onClick={() => exportBankFile("STANDARD")}
+            onClick={exportExcelFile}
             disabled={readyWithRib.length === 0}
-            className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-[12px] shadow-sm gap-1.5"
+            className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[12px] shadow-sm gap-1.5"
           >
-            <Download className="size-3.5" />
-            <span>تصدير ملف البنك ({readyWithRib.length})</span>
+            <FileSpreadsheet className="size-3.5" />
+            <span>تصدير Excel (.xlsx) ({readyWithRib.length})</span>
           </Button>
+
+          {/* Secondary Dropdown: Bank-specific CSV exports */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={readyWithRib.length === 0}
+                className="rounded-xl font-semibold text-[12px] gap-1 text-foreground"
+              >
+                <Download className="size-3.5 text-primary" />
+                <span>ملفات البنوك (CSV)</span>
+                <ChevronDown className="size-3 opacity-60" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56 text-[12.5px]">
+              <DropdownMenuItem onClick={() => exportBankCsv("CIH")} className="gap-2 cursor-pointer font-medium">
+                <Landmark className="size-4 text-blue-600" />
+                <span>CIH Bank (CSV Entreprise)</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportBankCsv("ATTIJARI")} className="gap-2 cursor-pointer font-medium">
+                <Landmark className="size-4 text-amber-600" />
+                <span>Attijariwafa bank (CSV Clic)</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportBankCsv("BCP")} className="gap-2 cursor-pointer font-medium">
+                <Landmark className="size-4 text-orange-600" />
+                <span>Banque Populaire (CSV)</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportBankCsv("EXCEL_CSV")} className="gap-2 cursor-pointer font-medium">
+                <FileText className="size-4 text-emerald-600" />
+                <span>CSV مخصص لـ Excel (بدون اختصار)</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -274,10 +422,25 @@ export function BulkSettlementExport({
                       <td className="py-2.5 px-3 text-muted-foreground">{r.bankName}</td>
                       <td className="py-2.5 px-3">
                         {r.hasRib ? (
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-mono text-[11px] text-foreground bg-muted/60 px-1.5 py-0.5 rounded">
-                              {r.rib.slice(0, 4)} {r.rib.slice(4, 8)} ... {r.rib.slice(-4)}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span
+                              title={`الـ RIB كامل: ${r.rib}`}
+                              className="font-mono text-[11.5px] font-bold text-foreground bg-muted/80 px-2 py-0.5 rounded tracking-wide border border-border/60 select-all"
+                            >
+                              {r.rib.replace(/(\d{4})/g, "$1 ").trim()}
                             </span>
+                            <button
+                              type="button"
+                              onClick={() => copyRib(r.rib)}
+                              title="نسخ رقم الـ RIB كاملاً (24 رقماً)"
+                              className="inline-flex size-6 items-center justify-center rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              {copiedRib === r.rib.replace(/\D/g, "") ? (
+                                <Check className="size-3.5 text-emerald-600" />
+                              ) : (
+                                <Copy className="size-3.5" />
+                              )}
+                            </button>
                             <CheckCircle2 className="size-3.5 text-emerald-600 shrink-0" />
                           </div>
                         ) : (
