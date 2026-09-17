@@ -41,6 +41,11 @@ export const FEATURES = [
   { key: "courier_cash_pocket", icon: "Receipt" },
   { key: "courier_batch_scan", icon: "ScanLine" },
   { key: "courier_closure", icon: "CheckSquare" },
+  { key: "admin_control_tower", icon: "RadioTower" },
+  { key: "admin_central_caisse", icon: "Landmark" },
+  { key: "admin_bank_settlement_export", icon: "FileSpreadsheet" },
+  { key: "admin_risk_radar", icon: "ShieldAlert" },
+  { key: "admin_smart_dispatch", icon: "Sparkles" },
 ] as const;
 
 export type FeatureKey = (typeof FEATURES)[number]["key"];

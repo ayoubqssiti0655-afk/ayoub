@@ -10,6 +10,10 @@ import { DH } from "@/lib/utils";
 import { forecastDemand } from "@/server/forecast";
 import { getFeatureMap } from "@/server/features";
 import { TrendingUp as TrendIcon } from "lucide-react";
+import { ControlTower, type CourierLiveInfo, type RiskAlert } from "@/components/admin/control-tower";
+import { CentralCaisseRadar, type CaisseRadarData } from "@/components/admin/central-caisse-radar";
+import { SmartDispatcher, type CityPendingDispatch } from "@/components/admin/smart-dispatcher";
+import { RiskRadar, type HighRiskOrder } from "@/components/admin/risk-radar";
 
 const DAY = 86400000;
 
@@ -67,6 +71,170 @@ export default async function AdminDashboard() {
     volumeSeries.push({ label, value: dayOrders.length });
   }
 
+  // ── Admin Pro Suite Data ──────────────────────────────────────
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+
+  // 1. Central Caisse Radar Data
+  let caisseRadarData: CaisseRadarData | null = null;
+  if (features.admin_central_caisse) {
+    const [streetAgg, declaredAgg, declCount, vaultTodayAgg, merchantsPayAgg] = await Promise.all([
+      db.delivery.aggregate({
+        where: { status: { in: ["IN_TRANSIT", "OUT_FOR_DELIVERY"] }, codCollected: { gt: 0 } },
+        _sum: { codCollected: true },
+      }),
+      db.courierDeposit.aggregate({
+        where: { status: "DECLARED" },
+        _sum: { amount: true },
+      }),
+      db.courierDeposit.count({
+        where: { status: "DECLARED" },
+      }),
+      db.courierDeposit.aggregate({
+        where: { status: "VERIFIED", declaredAt: { gte: startOfToday } },
+        _sum: { amount: true },
+      }),
+      db.merchant.aggregate({
+        where: { walletBalance: { gt: 0 } },
+        _sum: { walletBalance: true },
+      }),
+    ]);
+    caisseRadarData = {
+      cashInStreet: streetAgg._sum.codCollected ?? 0,
+      pendingCaisseDeposits: declaredAgg._sum.amount ?? 0,
+      pendingDepositsCount: declCount,
+      vaultCashToday: vaultTodayAgg._sum.amount ?? 0,
+      merchantsPayable: merchantsPayAgg._sum.walletBalance ?? 0,
+    };
+  }
+
+  // 2. Control Tower Data
+  let controlTowerCouriers: CourierLiveInfo[] = [];
+  const controlTowerAlerts: RiskAlert[] = [];
+  if (features.admin_control_tower) {
+    const activeList = await db.courier.findMany({
+      where: { status: "ACTIVE" },
+      include: {
+        user: { select: { name: true, phone: true } },
+        deliveries: {
+          where: { updatedAt: { gte: startOfToday } },
+          select: { status: true, codCollected: true },
+        },
+      },
+      orderBy: { employeeCode: "asc" },
+    });
+
+    const { cashSummary } = await import("@/server/cash");
+    controlTowerCouriers = await Promise.all(
+      activeList.map(async (c) => {
+        const summary = await cashSummary(c.id);
+        const assigned = c.deliveries.length;
+        const delivered = c.deliveries.filter((d) => d.status === "DELIVERED").length;
+        return {
+          id: c.id,
+          name: c.user.name,
+          phone: c.user.phone ?? "",
+          code: c.employeeCode,
+          city: c.homeCity,
+          lat: c.lastLat,
+          lng: c.lastLng,
+          lastSeenAt: c.lastSeenAt?.toISOString() ?? null,
+          assignedCount: assigned,
+          deliveredCount: delivered,
+          remainingCount: Math.max(0, assigned - delivered),
+          cashInHand: summary.cashInHand,
+        };
+      })
+    );
+
+    controlTowerCouriers.forEach((c) => {
+      if (c.cashInHand > 500000) {
+        controlTowerAlerts.push({
+          id: `cash-${c.id}`,
+          type: "HIGH_CASH",
+          title: `كاش مرتفع مع الموزع: ${c.name}`,
+          desc: `يحمل ${(c.cashInHand / 100).toFixed(0)} DH — يُرجى توجيهه للإيداع في أقرب وكالة/خزينة`,
+          time: "الآن",
+          severity: "high",
+        });
+      }
+      if (c.remainingCount > 0 && c.lastSeenAt && Date.now() - new Date(c.lastSeenAt).getTime() > 45 * 60000) {
+        controlTowerAlerts.push({
+          id: `idle-${c.id}`,
+          type: "IDLE_COURIER",
+          title: `توقف بدون تحديث: ${c.name}`,
+          desc: `لم يُحدِّث موقعه منذ أكثر من 45 دقيقة وما زال بحوزته ${c.remainingCount} طرد`,
+          time: "الآن",
+          severity: "medium",
+        });
+      }
+    });
+  }
+
+  // 3. Smart Dispatcher Data
+  let smartDispatchStats: CityPendingDispatch[] = [];
+  let smartDispatchTotal = 0;
+  if (features.admin_smart_dispatch) {
+    const unassignedOrders = await db.order.findMany({
+      where: { status: { in: ["CONFIRMED", "READY_FOR_PICKUP"] }, courierId: null },
+      select: { id: true, deliveryCity: true },
+    });
+    const couriers = await db.courier.findMany({
+      where: { status: "ACTIVE" },
+      select: { homeCity: true, zones: true },
+    });
+
+    const byCityMap: Record<string, number> = {};
+    unassignedOrders.forEach((o) => {
+      byCityMap[o.deliveryCity] = (byCityMap[o.deliveryCity] ?? 0) + 1;
+    });
+
+    smartDispatchStats = Object.entries(byCityMap).map(([city, count]) => {
+      const avail = couriers.filter((c) => {
+        try {
+          const z = JSON.parse(c.zones) as string[];
+          return c.homeCity === city || z.includes(city);
+        } catch {
+          return c.homeCity === city;
+        }
+      }).length;
+      return {
+        city,
+        unassignedCount: count,
+        availableCouriersCount: avail,
+      };
+    });
+    smartDispatchTotal = unassignedOrders.length;
+  }
+
+  // 4. Anti-Return Risk Radar Data
+  let riskRadarOrders: HighRiskOrder[] = [];
+  if (features.admin_risk_radar) {
+    const orders = await db.order.findMany({
+      where: {
+        status: { in: ["NEW", "CONFIRMED", "READY_FOR_PICKUP", "OUT_FOR_DELIVERY"] },
+        customer: { failedCount: { gte: 1 } },
+      },
+      include: { customer: true },
+      orderBy: { createdAt: "desc" },
+      take: 6,
+    });
+
+    riskRadarOrders = orders.map((o) => ({
+      orderId: o.id,
+      reference: o.reference,
+      customerName: o.customer.fullName,
+      customerPhone: o.customer.phone,
+      city: o.deliveryCity,
+      total: o.total,
+      codAmount: o.codAmount,
+      riskReason: o.customer.failedCount >= 2 ? "سوابق رفض متكررة (2+)" : "سجل إلغاء سابق",
+      previousFailedCount: o.customer.failedCount,
+      previousDeliveredCount: o.customer.totalOrders - o.customer.failedCount,
+      riskLevel: o.customer.failedCount >= 2 ? "HIGH" : "MEDIUM",
+    }));
+  }
+
   return (
     <>
       <PageHeader
@@ -89,6 +257,38 @@ export default async function AdminDashboard() {
         <StatCard label={i.t("dashboard.failed")} value={i.num(failed30)} icon="AlertTriangle" accent="var(--error)" hint="30 j" />
         <StatCard label={i.t("returns.title")} value={i.num(returned30)} icon="Truck" accent="var(--chart-4)" hint="30 j" />
       </div>
+
+      {/* ── 1. Central Caisse Radar ── */}
+      {features.admin_central_caisse && caisseRadarData && (
+        <div className="mt-4">
+          <CentralCaisseRadar data={caisseRadarData} enabled={features.admin_central_caisse} />
+        </div>
+      )}
+
+      {/* ── 2. Operations Control Tower (Live Fleet Map & Risk Alerts) ── */}
+      {features.admin_control_tower && (
+        <div className="mt-4">
+          <ControlTower couriers={controlTowerCouriers} alerts={controlTowerAlerts} enabled={features.admin_control_tower} />
+        </div>
+      )}
+
+      {/* ── 3. Smart Dispatcher (Morning Auto-Cluster) ── */}
+      {features.admin_smart_dispatch && (
+        <div className="mt-4">
+          <SmartDispatcher
+            cityStats={smartDispatchStats}
+            totalUnassigned={smartDispatchTotal}
+            enabled={features.admin_smart_dispatch}
+          />
+        </div>
+      )}
+
+      {/* ── 4. AI Anti-Return & High-Risk Customer Radar ── */}
+      {features.admin_risk_radar && (
+        <div className="mt-4">
+          <RiskRadar orders={riskRadarOrders} enabled={features.admin_risk_radar} />
+        </div>
+      )}
 
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
         <ChartCard title={i.t("admin.gmvTrend")} className="lg:col-span-2">

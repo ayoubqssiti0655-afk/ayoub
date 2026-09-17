@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   MessageCircle, ShieldCheck, Wand2, Wallet, RadioTower, ScanLine, BellRing,
   CreditCard, RefreshCcw, Sparkles, Circle, Truck, Zap, Navigation, Receipt, CheckSquare, Bike,
+  Landmark, FileSpreadsheet, ShieldAlert,
 } from "lucide-react";
 import { useI18n } from "@/i18n/provider";
 import { Switch } from "@/components/ui/misc";
@@ -13,6 +14,7 @@ import { setFeatureAction } from "@/server/admin-actions";
 
 const ICONS: Record<string, React.ComponentType<{ className?: string; strokeWidth?: number }>> = {
   MessageCircle, ShieldCheck, Wand2, Wallet, RadioTower, ScanLine, BellRing, CreditCard, RefreshCcw, Sparkles, Circle, Truck, Zap, Navigation, Receipt, CheckSquare, Bike,
+  Landmark, FileSpreadsheet, ShieldAlert,
 };
 
 export type FeatureRow = { key: string; icon: string; enabled: boolean };

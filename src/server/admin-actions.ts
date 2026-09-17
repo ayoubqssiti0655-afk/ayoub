@@ -441,3 +441,203 @@ export async function updatePlatformSettingsAction(input: { adminName: string; a
     return { ok: true };
   } catch (e) { return fail(e); }
 }
+
+// ── Admin Pro Suite Actions ───────────────────────────────────────
+
+/** 1-Click approval of all pending courier deposits in LA CAISSE */
+export async function bulkApproveDepositsAction(): Promise<AdminResult> {
+  try {
+    const admin = await requireAdmin();
+    const { releaseCourierPendingCod } = await import("@/server/cash");
+    const declaredDeposits = await db.courierDeposit.findMany({
+      where: { status: "DECLARED" },
+      select: { id: true, courierId: true, amount: true },
+    });
+
+    if (declaredDeposits.length === 0) {
+      return { ok: true, message: "Aucun versement en attente", data: { count: 0 } };
+    }
+
+    const now = new Date();
+    await db.courierDeposit.updateMany({
+      where: { id: { in: declaredDeposits.map((d) => d.id) } },
+      data: { status: "VERIFIED", verifiedAt: now, verifiedBy: admin.name },
+    });
+
+    const uniqueCouriers = Array.from(new Set(declaredDeposits.map((d) => d.courierId)));
+    for (const courierId of uniqueCouriers) {
+      await releaseCourierPendingCod(courierId);
+    }
+
+    await audit({
+      actorId: admin.id,
+      actorName: admin.name,
+      actorType: "ADMIN",
+      action: "DEPOSITS_BULK_VERIFIED",
+      entity: "CourierDeposit",
+      entityId: "BULK",
+      meta: `Approuvé ${declaredDeposits.length} versements`,
+    });
+
+    revalidatePath("/admin");
+    revalidatePath("/admin/couriers");
+    return { ok: true, data: { count: declaredDeposits.length } };
+  } catch (e) { return fail(e); }
+}
+
+/** Smart automatic dispatch of morning parcels to best active couriers */
+export async function smartDispatchMorningAction(input?: { city?: string }): Promise<AdminResult> {
+  try {
+    const admin = await requireAdmin();
+    const unassignedOrders = await db.order.findMany({
+      where: {
+        status: { in: ["CONFIRMED", "READY_FOR_PICKUP"] },
+        courierId: null,
+        ...(input?.city ? { deliveryCity: input.city } : {}),
+      },
+      include: { delivery: true },
+    });
+
+    if (unassignedOrders.length === 0) {
+      return { ok: true, message: "Aucun colis en attente d'assignation", data: { count: 0 } };
+    }
+
+    const couriers = await db.courier.findMany({
+      where: { status: "ACTIVE" },
+      include: {
+        deliveries: {
+          where: { status: { in: ["ASSIGNED", "PICKED_UP", "IN_TRANSIT", "OUT_FOR_DELIVERY"] } },
+          select: { id: true },
+        },
+      },
+    });
+
+    if (couriers.length === 0) {
+      return { ok: false, message: "Aucun livreur actif disponible" };
+    }
+
+    let dispatchedCount = 0;
+    const now = new Date();
+
+    for (const order of unassignedOrders) {
+      // Find matching couriers for this order's city
+      let eligible = couriers.filter((c) => {
+        try {
+          const zones = JSON.parse(c.zones) as string[];
+          return c.homeCity === order.deliveryCity || zones.includes(order.deliveryCity);
+        } catch {
+          return c.homeCity === order.deliveryCity;
+        }
+      });
+
+      if (eligible.length === 0) {
+        eligible = couriers; // fallback to any active courier
+      }
+
+      // Sort by least workload
+      eligible.sort((a, b) => a.deliveries.length - b.deliveries.length);
+      const chosen = eligible[0];
+
+      // Assign courier
+      await db.order.update({
+        where: { id: order.id },
+        data: { courierId: chosen.id, status: "IN_TRANSIT", updatedAt: now },
+      });
+
+      if (order.delivery) {
+        await db.delivery.update({
+          where: { id: order.delivery.id },
+          data: { courierId: chosen.id, status: "IN_TRANSIT" },
+        });
+      } else {
+        await db.delivery.create({
+          data: {
+            orderId: order.id,
+            courierId: chosen.id,
+            status: "IN_TRANSIT",
+            codCollected: 0,
+            codStatus: "PENDING",
+          },
+        });
+      }
+
+      await db.orderEvent.create({
+        data: {
+          orderId: order.id,
+          type: "ASSIGNED",
+          actorType: "ADMIN",
+          actorName: `Smart Dispatch (${admin.name})`,
+          message: `Assigné automatiquement au livreur ${chosen.employeeCode}`,
+        },
+      });
+
+      chosen.deliveries.push({ id: `temp-${dispatchedCount}` });
+      dispatchedCount++;
+    }
+
+    await audit({
+      actorId: admin.id,
+      actorName: admin.name,
+      actorType: "ADMIN",
+      action: "SMART_DISPATCH_EXECUTED",
+      entity: "Order",
+      entityId: "BATCH",
+      meta: `${dispatchedCount} colis assignés automatiquement`,
+    });
+
+    revalidatePath("/admin");
+    revalidatePath("/admin/orders");
+    revalidatePath("/admin/deliveries");
+    return { ok: true, data: { count: dispatchedCount } };
+  } catch (e) { return fail(e); }
+}
+
+/** Get structured list of merchant payouts for Moroccan bank export (RIB 24) */
+export async function getBulkSettlementExportDataAction(): Promise<AdminResult> {
+  try {
+    await requireAdmin();
+    const merchants = await db.merchant.findMany({
+      where: { walletBalance: { gte: 20000 } }, // >= 200 DH
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        city: true,
+        walletBalance: true,
+        settlementCycle: true,
+      },
+      orderBy: { walletBalance: "desc" },
+    });
+
+    const bankKeys = merchants.map((m) => `merchant_bank_${m.id}`);
+    const bankSettings = await db.setting.findMany({
+      where: { key: { in: bankKeys } },
+    });
+    const bankMap = new Map<string, { bankName: string; rib: string; accountHolder: string }>();
+    for (const s of bankSettings) {
+      try {
+        const mId = s.key.replace("merchant_bank_", "");
+        bankMap.set(mId, JSON.parse(s.value));
+      } catch {}
+    }
+
+    const rows = merchants.map((m) => {
+      const bank = bankMap.get(m.id);
+      return {
+        merchantId: m.id,
+        merchantName: m.name,
+        phone: m.phone,
+        city: m.city,
+        amountCentimes: m.walletBalance,
+        amountDh: m.walletBalance / 100,
+        hasRib: !!bank?.rib,
+        bankName: bank?.bankName ?? "Non renseigné",
+        rib: bank?.rib ?? "",
+        accountHolder: bank?.accountHolder ?? m.name,
+      };
+    });
+
+    return { ok: true, data: rows };
+  } catch (e) { return fail(e); }
+}
