@@ -7,45 +7,58 @@ import { db } from "@/server/db";
  * toggle for each entry, and server code gates itself via isFeatureEnabled().
  * To add a future feature: append to FEATURES, gate your code, done.
  */
+export type FeatureCategory = "admin" | "courier" | "merchant" | "logistics_ai" | "finance" | "communication";
+
 export const FEATURES = [
-  { key: "whatsapp", icon: "MessageCircle" },
-  { key: "trust_score", icon: "ShieldCheck" },
-  { key: "auto_dispatch", icon: "Wand2" },
-  { key: "cash_reconciliation", icon: "Wallet" },
-  { key: "live_tracking", icon: "RadioTower" },
-  { key: "qr_labels", icon: "ScanLine" },
-  { key: "pwa_alerts", icon: "BellRing" },
-  { key: "online_payment", icon: "CreditCard" },
-  { key: "exchange_orders", icon: "RefreshCcw" },
-  { key: "insights", icon: "Sparkles" },
-  { key: "delivery_slots", icon: "CalendarClock" },
-  { key: "hub_bags", icon: "PackageOpen" },
-  { key: "instant_payout", icon: "Zap" },
-  { key: "stock_management", icon: "Boxes" },
-  { key: "post_delivery_rating", icon: "Star" },
-  { key: "pickup_points", icon: "MapPinned" },
-  { key: "address_iq", icon: "Brain" },
-  { key: "daily_digest", icon: "Newspaper" },
-  { key: "demand_forecast", icon: "ChartLine" },
-  { key: "disputes", icon: "Scale" },
-  { key: "storefront", icon: "Store" },
-  { key: "confirmation_queue", icon: "PhoneCall" },
-  { key: "tickets", icon: "LifeBuoy" },
-  { key: "staff_permissions", icon: "UserCog" },
-  { key: "invoices", icon: "FileText" },
-  { key: "anomaly_alerts", icon: "Siren" },
-  { key: "weight_capture", icon: "Weight" },
-  { key: "promo_codes", icon: "TicketPercent" },
-  { key: "delivery_control_center", icon: "Truck" },
-  { key: "courier_quick_actions", icon: "Navigation" },
-  { key: "courier_cash_pocket", icon: "Receipt" },
-  { key: "courier_batch_scan", icon: "ScanLine" },
-  { key: "courier_closure", icon: "CheckSquare" },
-  { key: "admin_control_tower", icon: "RadioTower" },
-  { key: "admin_central_caisse", icon: "Landmark" },
-  { key: "admin_bank_settlement_export", icon: "FileSpreadsheet" },
-  { key: "admin_risk_radar", icon: "ShieldAlert" },
-  { key: "admin_smart_dispatch", icon: "Sparkles" },
+  // Admin & Central Operations
+  { key: "admin_control_tower", icon: "RadioTower", category: "admin" },
+  { key: "admin_central_caisse", icon: "Landmark", category: "admin" },
+  { key: "admin_smart_dispatch", icon: "Sparkles", category: "admin" },
+  { key: "admin_risk_radar", icon: "ShieldAlert", category: "admin" },
+  { key: "admin_bank_settlement_export", icon: "FileSpreadsheet", category: "admin" },
+  { key: "staff_permissions", icon: "UserCog", category: "admin" },
+  { key: "anomaly_alerts", icon: "Siren", category: "admin" },
+  { key: "disputes", icon: "Scale", category: "admin" },
+
+  // Courier & Field Logistics
+  { key: "courier_quick_actions", icon: "Navigation", category: "courier" },
+  { key: "courier_cash_pocket", icon: "Receipt", category: "courier" },
+  { key: "courier_batch_scan", icon: "ScanLine", category: "courier" },
+  { key: "courier_closure", icon: "CheckSquare", category: "courier" },
+  { key: "delivery_control_center", icon: "Truck", category: "courier" },
+  { key: "cash_reconciliation", icon: "Wallet", category: "courier" },
+  { key: "pwa_alerts", icon: "BellRing", category: "courier" },
+  { key: "post_delivery_rating", icon: "Star", category: "courier" },
+
+  // Merchant & Orders Management
+  { key: "confirmation_queue", icon: "PhoneCall", category: "merchant" },
+  { key: "storefront", icon: "Store", category: "merchant" },
+  { key: "stock_management", icon: "Boxes", category: "merchant" },
+  { key: "qr_labels", icon: "ScanLine", category: "merchant" },
+  { key: "exchange_orders", icon: "RefreshCcw", category: "merchant" },
+  { key: "weight_capture", icon: "Weight", category: "merchant" },
+  { key: "invoices", icon: "FileText", category: "merchant" },
+  { key: "promo_codes", icon: "TicketPercent", category: "merchant" },
+
+  // AI & Smart Logistics
+  { key: "auto_dispatch", icon: "Wand2", category: "logistics_ai" },
+  { key: "address_iq", icon: "Brain", category: "logistics_ai" },
+  { key: "trust_score", icon: "ShieldCheck", category: "logistics_ai" },
+  { key: "demand_forecast", icon: "ChartLine", category: "logistics_ai" },
+  { key: "insights", icon: "Sparkles", category: "logistics_ai" },
+  { key: "hub_bags", icon: "PackageOpen", category: "logistics_ai" },
+  { key: "pickup_points", icon: "MapPinned", category: "logistics_ai" },
+  { key: "delivery_slots", icon: "CalendarClock", category: "logistics_ai" },
+
+  // Finance & Payments
+  { key: "instant_payout", icon: "Zap", category: "finance" },
+  { key: "online_payment", icon: "CreditCard", category: "finance" },
+
+  // Customer Communication & Tracking
+  { key: "whatsapp", icon: "MessageCircle", category: "communication" },
+  { key: "live_tracking", icon: "RadioTower", category: "communication" },
+  { key: "daily_digest", icon: "Newspaper", category: "communication" },
+  { key: "tickets", icon: "LifeBuoy", category: "communication" },
 ] as const;
 
 export type FeatureKey = (typeof FEATURES)[number]["key"];

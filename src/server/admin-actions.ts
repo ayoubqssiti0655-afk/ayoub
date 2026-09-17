@@ -258,6 +258,27 @@ export async function setFeatureAction(key: string, enabled: boolean): Promise<A
   } catch (e) { return fail(e); }
 }
 
+export async function setFeaturesBatchAction(keys: string[], enabled: boolean): Promise<AdminResult> {
+  try {
+    const admin = await requireAdmin();
+    const { FEATURES, setFeatureEnabled } = await import("@/server/features");
+    const validKeys = keys.filter((k) => FEATURES.some((f) => f.key === k));
+    for (const k of validKeys) {
+      await setFeatureEnabled(k as Parameters<typeof setFeatureEnabled>[0], enabled);
+    }
+    await audit({
+      actorId: admin.id,
+      actorName: admin.name,
+      actorType: "ADMIN",
+      action: enabled ? "BATCH_FEATURES_ENABLED" : "BATCH_FEATURES_DISABLED",
+      entity: "Feature",
+      meta: JSON.stringify({ count: validKeys.length, keys: validKeys }),
+    });
+    revalidatePath("/", "layout");
+    return { ok: true, data: { count: validKeys.length } };
+  } catch (e) { return fail(e); }
+}
+
 export async function setDepositStatusAction(depositId: string, status: "VERIFIED" | "MISMATCH"): Promise<AdminResult> {
   try {
     const admin = await requireAdmin();

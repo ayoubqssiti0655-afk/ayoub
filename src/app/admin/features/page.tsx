@@ -8,7 +8,12 @@ export const metadata = { title: "Features" };
 export default async function AdminFeaturesPage() {
   const i = await getI18n();
   const map = await getFeatureMap();
-  const rows: FeatureRow[] = FEATURES.map((f) => ({ key: f.key, icon: f.icon as string, enabled: map[f.key] }));
+  const rows: FeatureRow[] = FEATURES.map((f) => ({
+    key: f.key,
+    icon: f.icon as string,
+    category: f.category,
+    enabled: map[f.key] ?? true,
+  }));
   return (
     <>
       <PageHeader title={i.t("features.title")} subtitle={i.t("features.subtitle")} />

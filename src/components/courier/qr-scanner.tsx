@@ -68,11 +68,13 @@ export function QrScanButton({
     try {
       const res = await fetch(`/api/v1/courier/lookup/${encodeURIComponent(ref)}`);
       if (!res.ok) {
-        setError(`الرمز ${ref} غير موجود أو غير مسند إليك`);
+        const errJson = await res.json().catch(() => null);
+        setError(errJson?.error || errJson?.message || `الرمز ${ref} غير موجود أو غير مسند إليك`);
         return;
       }
       const j = await res.json();
       const deliveryId = j.data?.deliveryId;
+      setError(null);
 
       playScanBeep();
       setLastScanned(ref);
@@ -234,7 +236,10 @@ export function QrScanButton({
               <div className="flex gap-2">
                 <Input
                   value={manual}
-                  onChange={(e) => setManual(e.target.value)}
+                  onChange={(e) => {
+                    setManual(e.target.value);
+                    if (error) setError(null);
+                  }}
                   placeholder="MSR-8X2K4Q"
                   dir="ltr"
                   className="h-10 font-mono text-[13px] uppercase rounded-xl"
