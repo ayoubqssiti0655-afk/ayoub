@@ -8,11 +8,6 @@ import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Input, Field } from "@/components/ui/input";
 
-const DEMO = [
-  { role: "MERCHANT", email: "merchant@masar.ma", name: "Zellige Store" },
-  { role: "ADMIN", email: "admin@masar.ma", name: "Masar HQ" },
-  { role: "COURIER", email: "courier@masar.ma", name: "Youssef E." },
-];
 
 export function LoginForm() {
   const { t } = useI18n();
@@ -66,27 +61,6 @@ export function LoginForm() {
           {busy ? t("common.loading") : t("auth.signIn")}
         </Button>
       </form>
-
-      <div className="mt-6 rounded-xl border border-border bg-surface-2 p-3.5">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-faint">{t("auth.demoAccounts")}</p>
-        <p className="mt-1 text-[11.5px] text-muted-foreground">{t("auth.demoHint", { password: "Demo1234!" })}</p>
-        <div className="mt-2.5 grid gap-1.5">
-          {DEMO.map((d) => (
-            <button
-              key={d.email}
-              type="button"
-              onClick={() => { setEmail(d.email); setPassword("Demo1234!"); }}
-              className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2 text-start transition-colors hover:border-primary/40"
-            >
-              <span>
-                <span className="block text-[12.5px] font-medium">{d.name}</span>
-                <span className="block text-[11px] text-faint" dir="ltr">{d.email}</span>
-              </span>
-              <span className="rounded-md bg-primary-soft px-2 py-0.5 text-[10.5px] font-semibold text-primary">{t("auth.use")}</span>
-            </button>
-          ))}
-        </div>
-      </div>
 
       <p className="mt-6 text-center text-[13px] text-muted-foreground">
         {t("auth.noAccount")}{" "}
